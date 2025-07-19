@@ -38,19 +38,14 @@ class SyncOrchestratorService {
     logger.section('MetaExodus - Database Synchronization');
 
     try {
-      // Phase 1: Authentication and Connection
       await this.authenticateAndConnect(credentials);
 
-      // Phase 2: Discovery and Analysis
       const { tables, dependencies, enumMap } = await this.discoverAndAnalyze();
 
-      // Phase 3: Data Clearing
       await this.clearExistingData(tables, dependencies);
 
-      // Phase 4: Data Synchronization
       await this.synchronizeData(tables, dependencies, enumMap);
 
-      // Phase 5: Finalization
       return await this.finalizeSynchronization();
 
     } catch (error) {
@@ -91,7 +86,6 @@ class SyncOrchestratorService {
    * @returns {Promise<Object>} Discovery results
    */
   async discoverAndAnalyze() {
-    // Discover tables in Metabase
     logger.startSpinner('Discovering tables in Metabase');
     const tablesResult = await metabaseService.getTables();
 
@@ -104,13 +98,11 @@ class SyncOrchestratorService {
     this.syncStats.totalTables = tables.length;
     logger.stopSpinner(true, `Found ${tables.length} tables to synchronize`);
 
-    // Analyze table dependencies
     logger.startSpinner('Analyzing table dependencies');
     const localConnection = await connectionService.connectLocal();
     const dependencies = await dataService.getTableDependencies(localConnection);
     logger.stopSpinner(true, 'Table dependencies analyzed');
 
-    // Discover database schema
     logger.startSpinner('Discovering database schema');
     const enumMap = await schemaDiscoveryService.discoverEnumValues(localConnection);
     logger.stopSpinner(true, `Discovered ${Object.keys(enumMap).length} enum types`);
@@ -236,7 +228,6 @@ class SyncOrchestratorService {
     
     logger.stopProgress();
 
-    // Check for failures and handle rollback
     if (this.syncStats.failedTables.length > 0) {
       await this.handleSyncFailures(tables, dependencies);
     }
@@ -249,14 +240,12 @@ class SyncOrchestratorService {
    * @param {Object} enumMap - Enum type mappings
    */
   async syncSingleTable(connection, table, enumMap) {
-    // Extract data from Metabase
     const extractResult = await metabaseService.extractAllTableData(table.id, table.name);
 
     if (!extractResult.success || extractResult.data.length === 0) {
       throw new Error(`Data extraction failed: ${extractResult.error || 'No data returned'}`);
     }
 
-    // Transform data for schema compatibility
     const transformedData = await dataTransformationService.transformTableData(
       connection,
       table.name,
@@ -264,7 +253,6 @@ class SyncOrchestratorService {
       enumMap
     );
 
-    // Insert data into local database
     const insertResult = await dataService.insertTableData(
       connection,
       table.name,
@@ -282,7 +270,6 @@ class SyncOrchestratorService {
       throw new Error(`Data insertion failed: ${errorDetails}`);
     }
 
-    // Verify row count for exact replica
     if (insertResult.insertedRows !== extractResult.data.length) {
       throw new Error(`Row count mismatch: expected ${extractResult.data.length}, inserted ${insertResult.insertedRows}`);
     }
@@ -380,27 +367,21 @@ class SyncOrchestratorService {
     logger.section('MetaExodus - Dry Run Analysis');
 
     try {
-      // Authenticate and connect
       await this.authenticateAndConnect(credentials);
 
-      // Discover and analyze
-      const { tables, dependencies, enumMap } = await this.discoverAndAnalyze();
+      const { tables, enumMap } = await this.discoverAndAnalyze();
 
-      // Analyze table sizes
       const tableCounts = await this.analyzeTableSizes(tables);
 
-      // Perform dry-run analysis
       const dryRunResult = await this.analyzePlannedChanges(tables, tableCounts, enumMap);
 
       if (!dryRunResult.success) {
         return { success: false, error: dryRunResult.error };
       }
 
-      // Generate dry-run summary
       this.syncStats.endTime = Date.now();
       const summary = this.generateDryRunSummary(dryRunResult, tableCounts);
 
-      // Display summary
       logger.section('Dry Run Summary');
       logger.table([
         { 'Metric': 'Total Tables', 'Value': tables.length.toString() },
@@ -460,7 +441,6 @@ class SyncOrchestratorService {
           totalRowsToSync += rowCount;
 
           try {
-            // Sample a few rows to analyze potential transformations
             const sampleResult = await metabaseService.extractTableData(
               table.id,
               table.name,
@@ -468,7 +448,6 @@ class SyncOrchestratorService {
             );
 
             if (sampleResult.success && sampleResult.data.length > 0) {
-              // Analyze potential data transformations
               const transformResult = await dataTransformationService.transformTableData(
                 localConnection,
                 table.name,
@@ -492,7 +471,6 @@ class SyncOrchestratorService {
               }
             }
 
-            // Check for potential schema issues
             const schemaInfo = await schemaDiscoveryService.getTableSchemaInfo(localConnection, table.name);
             if (schemaInfo.enumColumns && schemaInfo.enumColumns.length > 0) {
               schemaChanges++;
@@ -526,10 +504,10 @@ class SyncOrchestratorService {
   /**
    * Generates a dry-run summary
    * @param {Object} analysisResult - Analysis result
-   * @param {Object} tableCounts - Table counts
+   * @param {Object} _tableCounts - Table counts
    * @returns {Object} Dry-run summary
    */
-  generateDryRunSummary(analysisResult, tableCounts) {
+  generateDryRunSummary(analysisResult, _tableCounts) {
     const endTime = Date.now();
     const duration = this.syncStats.startTime ? endTime - this.syncStats.startTime : 0;
     const durationMinutes = Math.floor(duration / 60000);
