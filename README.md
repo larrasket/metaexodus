@@ -2,6 +2,9 @@
 
 API-powered migration from Metabase to local Postgres
 
+<video src='.github/demo.mp4'/>
+
+
 MetaExodus is a simple tool that copies your entire database from Metabase to
 your local PostgreSQL. It connects to Metabase via API, grabs all your tables
 and data, then recreates everything locally. Perfect for developers who need a
