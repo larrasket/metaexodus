@@ -1,14 +1,16 @@
 import { jest } from '@jest/globals';
-import { DataTransformationService, dataTransformationService } from '../../src/services/dataTransformation.js';
 
-// Mock the schemaDiscoveryService
+// Mock the schemaDiscoveryService BEFORE importing anything else
+const mockSchemaDiscoveryService = {
+  discoverTableSchema: jest.fn()
+};
+
 jest.unstable_mockModule('../../src/services/schemaDiscovery.js', () => ({
-  schemaDiscoveryService: {
-    discoverTableSchema: jest.fn()
-  }
+  schemaDiscoveryService: mockSchemaDiscoveryService
 }));
 
-const { schemaDiscoveryService } = await import('../../src/services/schemaDiscovery.js');
+// Now import the service
+const { DataTransformationService, dataTransformationService } = await import('../../src/services/dataTransformation.js');
 
 describe('DataTransformationService', () => {
   let service;
@@ -16,7 +18,9 @@ describe('DataTransformationService', () => {
 
   beforeEach(() => {
     service = new DataTransformationService();
-    mockConnection = { query: jest.fn() };
+    mockConnection = { 
+      query: jest.fn().mockResolvedValue({ rows: [] })
+    };
     jest.clearAllMocks();
     service.resetStats();
   });
@@ -32,7 +36,7 @@ describe('DataTransformationService', () => {
         }
       ];
 
-      schemaDiscoveryService.discoverTableSchema.mockResolvedValue(mockSchema);
+      mockSchemaDiscoveryService.discoverTableSchema.mockResolvedValue(mockSchema);
 
       const data = [
         { id: 1, status: 'ACTIVITY' },
@@ -57,7 +61,7 @@ describe('DataTransformationService', () => {
     });
 
     test('should handle tables with no enum columns', async () => {
-      schemaDiscoveryService.discoverTableSchema.mockResolvedValue([
+      mockSchemaDiscoveryService.discoverTableSchema.mockResolvedValue([
         {
           column_name: 'id',
           data_type: 'integer',

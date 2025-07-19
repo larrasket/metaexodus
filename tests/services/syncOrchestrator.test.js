@@ -1,52 +1,58 @@
 import { jest } from '@jest/globals';
-import { SyncOrchestratorService, syncOrchestratorService } from '../../src/services/syncOrchestrator.js';
+
+// Create mock objects first
+const mockMetabaseService = {
+  authenticate: jest.fn(),
+  getTables: jest.fn(),
+  getTableRowCount: jest.fn(),
+  extractAllTableData: jest.fn(),
+  logout: jest.fn()
+};
+
+const mockConnectionService = {
+  initialize: jest.fn(),
+  connectLocal: jest.fn(),
+  closeConnections: jest.fn()
+};
+
+const mockDataService = {
+  initialize: jest.fn(),
+  getTableDependencies: jest.fn(),
+  sortTablesByDependencies: jest.fn(),
+  insertTableData: jest.fn()
+};
+
+const mockSchemaDiscoveryService = {
+  discoverEnumValues: jest.fn()
+};
+
+const mockDataTransformationService = {
+  transformTableData: jest.fn(),
+  getTransformationStats: jest.fn()
+};
 
 // Mock all the services
 jest.unstable_mockModule('../../src/services/metabase.js', () => ({
-  metabaseService: {
-    authenticate: jest.fn(),
-    getTables: jest.fn(),
-    getTableRowCount: jest.fn(),
-    extractAllTableData: jest.fn(),
-    logout: jest.fn()
-  }
+  metabaseService: mockMetabaseService
 }));
 
 jest.unstable_mockModule('../../src/services/connection.js', () => ({
-  connectionService: {
-    initialize: jest.fn(),
-    connectLocal: jest.fn(),
-    closeConnections: jest.fn()
-  }
+  connectionService: mockConnectionService
 }));
 
 jest.unstable_mockModule('../../src/services/data.js', () => ({
-  dataService: {
-    initialize: jest.fn(),
-    getTableDependencies: jest.fn(),
-    sortTablesByDependencies: jest.fn(),
-    insertTableData: jest.fn()
-  }
+  dataService: mockDataService
 }));
 
 jest.unstable_mockModule('../../src/services/schemaDiscovery.js', () => ({
-  schemaDiscoveryService: {
-    discoverEnumValues: jest.fn()
-  }
+  schemaDiscoveryService: mockSchemaDiscoveryService
 }));
 
 jest.unstable_mockModule('../../src/services/dataTransformation.js', () => ({
-  dataTransformationService: {
-    transformTableData: jest.fn(),
-    getTransformationStats: jest.fn()
-  }
+  dataTransformationService: mockDataTransformationService
 }));
 
-const { metabaseService } = await import('../../src/services/metabase.js');
-const { connectionService } = await import('../../src/services/connection.js');
-const { dataService } = await import('../../src/services/data.js');
-const { schemaDiscoveryService } = await import('../../src/services/schemaDiscovery.js');
-const { dataTransformationService } = await import('../../src/services/dataTransformation.js');
+const { SyncOrchestratorService, syncOrchestratorService } = await import('../../src/services/syncOrchestrator.js');
 
 describe('SyncOrchestratorService', () => {
   let service;
@@ -58,31 +64,31 @@ describe('SyncOrchestratorService', () => {
     jest.clearAllMocks();
 
     // Setup default mocks
-    metabaseService.authenticate.mockResolvedValue({ success: true });
-    connectionService.initialize.mockResolvedValue();
-    dataService.initialize.mockResolvedValue();
-    connectionService.connectLocal.mockResolvedValue(mockConnection);
-    metabaseService.getTables.mockResolvedValue({
+    mockMetabaseService.authenticate.mockResolvedValue({ success: true });
+    mockConnectionService.initialize.mockResolvedValue();
+    mockDataService.initialize.mockResolvedValue();
+    mockConnectionService.connectLocal.mockResolvedValue(mockConnection);
+    mockMetabaseService.getTables.mockResolvedValue({
       success: true,
       tables: [
         { id: 1, name: 'users' },
         { id: 2, name: 'orders' }
       ]
     });
-    dataService.getTableDependencies.mockResolvedValue({});
-    dataService.sortTablesByDependencies.mockReturnValue(['users', 'orders']);
-    schemaDiscoveryService.discoverEnumValues.mockResolvedValue({});
-    metabaseService.getTableRowCount.mockResolvedValue({ success: true, count: 10 });
-    metabaseService.extractAllTableData.mockResolvedValue({
+    mockDataService.getTableDependencies.mockResolvedValue({});
+    mockDataService.sortTablesByDependencies.mockReturnValue(['users', 'orders']);
+    mockSchemaDiscoveryService.discoverEnumValues.mockResolvedValue({});
+    mockMetabaseService.getTableRowCount.mockResolvedValue({ success: true, count: 10 });
+    mockMetabaseService.extractAllTableData.mockResolvedValue({
       success: true,
       data: [{ id: 1, name: 'test' }]
     });
-    dataTransformationService.transformTableData.mockResolvedValue([{ id: 1, name: 'test' }]);
-    dataService.insertTableData.mockResolvedValue({
+    mockDataTransformationService.transformTableData.mockResolvedValue([{ id: 1, name: 'test' }]);
+    mockDataService.insertTableData.mockResolvedValue({
       success: true,
       insertedRows: 1
     });
-    dataTransformationService.getTransformationStats.mockReturnValue({});
+    mockDataTransformationService.getTransformationStats.mockReturnValue({});
   });
 
   describe('executeSync', () => {
@@ -94,13 +100,13 @@ describe('SyncOrchestratorService', () => {
       expect(result.success).toBe(true);
       expect(result.totalTables).toBe(2);
       expect(result.successfulTables).toBe(2);
-      expect(metabaseService.authenticate).toHaveBeenCalledWith('test', 'test');
-      expect(connectionService.initialize).toHaveBeenCalled();
-      expect(dataService.initialize).toHaveBeenCalled();
+      expect(mockMetabaseService.authenticate).toHaveBeenCalledWith('test', 'test');
+      expect(mockConnectionService.initialize).toHaveBeenCalled();
+      expect(mockDataService.initialize).toHaveBeenCalled();
     });
 
     test('should handle authentication failure', async () => {
-      metabaseService.authenticate.mockResolvedValue({
+      mockMetabaseService.authenticate.mockResolvedValue({
         success: false,
         error: 'Invalid credentials'
       });
@@ -113,7 +119,7 @@ describe('SyncOrchestratorService', () => {
     });
 
     test('should handle table discovery failure', async () => {
-      metabaseService.getTables.mockResolvedValue({
+      mockMetabaseService.getTables.mockResolvedValue({
         success: false,
         error: 'API error'
       });
@@ -133,13 +139,13 @@ describe('SyncOrchestratorService', () => {
 
       await service.syncSingleTable(mockConnection, table, enumMap);
 
-      expect(metabaseService.extractAllTableData).toHaveBeenCalledWith(1, 'users');
-      expect(dataTransformationService.transformTableData).toHaveBeenCalled();
-      expect(dataService.insertTableData).toHaveBeenCalled();
+      expect(mockMetabaseService.extractAllTableData).toHaveBeenCalledWith(1, 'users');
+      expect(mockDataTransformationService.transformTableData).toHaveBeenCalled();
+      expect(mockDataService.insertTableData).toHaveBeenCalled();
     });
 
     test('should handle data extraction failure', async () => {
-      metabaseService.extractAllTableData.mockResolvedValue({
+      mockMetabaseService.extractAllTableData.mockResolvedValue({
         success: false,
         error: 'Extraction failed'
       });
@@ -152,7 +158,7 @@ describe('SyncOrchestratorService', () => {
     });
 
     test('should handle data insertion failure', async () => {
-      dataService.insertTableData.mockResolvedValue({
+      mockDataService.insertTableData.mockResolvedValue({
         success: false,
         errors: [{ error: 'Constraint violation' }]
       });
@@ -165,12 +171,12 @@ describe('SyncOrchestratorService', () => {
     });
 
     test('should handle row count mismatch', async () => {
-      metabaseService.extractAllTableData.mockResolvedValue({
+      mockMetabaseService.extractAllTableData.mockResolvedValue({
         success: true,
         data: [{ id: 1 }, { id: 2 }]
       });
 
-      dataService.insertTableData.mockResolvedValue({
+      mockDataService.insertTableData.mockResolvedValue({
         success: true,
         insertedRows: 1
       });
@@ -225,12 +231,12 @@ describe('SyncOrchestratorService', () => {
     test('should cleanup resources', async () => {
       await service.cleanup();
 
-      expect(connectionService.closeConnections).toHaveBeenCalled();
-      expect(metabaseService.logout).toHaveBeenCalled();
+      expect(mockConnectionService.closeConnections).toHaveBeenCalled();
+      expect(mockMetabaseService.logout).toHaveBeenCalled();
     });
 
     test('should handle cleanup errors gracefully', async () => {
-      connectionService.closeConnections.mockRejectedValue(new Error('Cleanup error'));
+      mockConnectionService.closeConnections.mockRejectedValue(new Error('Cleanup error'));
 
       await expect(service.cleanup()).resolves.not.toThrow();
     });

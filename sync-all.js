@@ -84,8 +84,10 @@ async function main() {
             if (!result.success) {
                 process.exit(1);
             }
+            process.exit(0);
         } else {
             await syncOrchestratorService.executeSync(credentials);
+            process.exit(0);
         }
     } catch (error) {
         logger.error('Fatal error', error);
