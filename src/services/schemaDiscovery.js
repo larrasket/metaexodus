@@ -1,25 +1,19 @@
 import { logger } from '../utils/logger.js';
 
 /**
- * Service for discovering and analyzing database schema information
+ * Service for discovering database schema information
  */
 class SchemaDiscoveryService {
   constructor() {
-    this.enumCache = new Map();
     this.schemaCache = new Map();
   }
 
   /**
    * Discovers all enum types and their valid values from PostgreSQL
    * @param {Object} connection - Database connection
-   * @returns {Promise<Object>} Map of enum names to their valid values
+   * @returns {Promise<Object>} Map of enum types to their valid values
    */
   async discoverEnumValues(connection) {
-    const cacheKey = 'enums';
-    if (this.enumCache.has(cacheKey)) {
-      return this.enumCache.get(cacheKey);
-    }
-
     try {
       const query = `
         SELECT 
@@ -31,18 +25,20 @@ class SchemaDiscoveryService {
         WHERE n.nspname = 'public'
         ORDER BY t.typname, e.enumsortorder;
       `;
-
+      
       const result = await connection.query(query);
       const enumMap = {};
-
+      
       result.rows.forEach(row => {
         if (!enumMap[row.enum_name]) {
           enumMap[row.enum_name] = [];
         }
         enumMap[row.enum_name].push(row.enum_value);
       });
-
-      this.enumCache.set(cacheKey, enumMap);
+      
+      // Cache the results
+      this.schemaCache.set('enums', enumMap);
+      
       return enumMap;
     } catch (error) {
       logger.warn(`Could not discover enum values: ${error.message}`);
@@ -57,8 +53,10 @@ class SchemaDiscoveryService {
    * @returns {Promise<Array>} Array of column information
    */
   async discoverTableSchema(connection, tableName) {
-    if (this.schemaCache.has(tableName)) {
-      return this.schemaCache.get(tableName);
+    const cacheKey = `table_${tableName}`;
+    
+    if (this.schemaCache.has(cacheKey)) {
+      return this.schemaCache.get(cacheKey);
     }
 
     try {
@@ -75,9 +73,12 @@ class SchemaDiscoveryService {
         AND c.table_schema = 'public'
         ORDER BY c.ordinal_position;
       `;
-
+      
       const result = await connection.query(query, [tableName]);
-      this.schemaCache.set(tableName, result.rows);
+      
+      // Cache the results
+      this.schemaCache.set(cacheKey, result.rows);
+      
       return result.rows;
     } catch (error) {
       logger.warn(`Could not discover schema for table ${tableName}: ${error.message}`);
@@ -86,27 +87,110 @@ class SchemaDiscoveryService {
   }
 
   /**
-   * Gets enum columns for a specific table
+   * Discovers foreign key constraints for a table
    * @param {Object} connection - Database connection
    * @param {string} tableName - Name of the table
-   * @param {Object} enumMap - Map of enum types
-   * @returns {Promise<Array>} Array of enum column information
+   * @returns {Promise<Array>} Array of foreign key constraint information
    */
-  async getEnumColumns(connection, tableName, enumMap) {
-    const schema = await this.discoverTableSchema(connection, tableName);
-    return schema.filter(col => col.udt_name && enumMap[col.udt_name]);
+  async discoverForeignKeys(connection, tableName) {
+    const cacheKey = `fk_${tableName}`;
+    
+    if (this.schemaCache.has(cacheKey)) {
+      return this.schemaCache.get(cacheKey);
+    }
+
+    try {
+      const query = `
+        SELECT 
+          tc.constraint_name,
+          kcu.column_name,
+          ccu.table_name AS foreign_table_name,
+          ccu.column_name AS foreign_column_name
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu 
+          ON tc.constraint_name = kcu.constraint_name
+          AND tc.table_schema = kcu.table_schema
+        JOIN information_schema.constraint_column_usage ccu 
+          ON ccu.constraint_name = tc.constraint_name
+          AND ccu.table_schema = tc.table_schema
+        WHERE tc.constraint_type = 'FOREIGN KEY'
+        AND tc.table_name = $1
+        AND tc.table_schema = 'public';
+      `;
+      
+      const result = await connection.query(query, [tableName]);
+      
+      // Cache the results
+      this.schemaCache.set(cacheKey, result.rows);
+      
+      return result.rows;
+    } catch (error) {
+      logger.warn(`Could not discover foreign keys for table ${tableName}: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Discovers all table names in the database
+   * @param {Object} connection - Database connection
+   * @returns {Promise<Array>} Array of table names
+   */
+  async discoverTables(connection) {
+    if (this.schemaCache.has('tables')) {
+      return this.schemaCache.get('tables');
+    }
+
+    try {
+      const query = `
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_type = 'BASE TABLE'
+        ORDER BY table_name;
+      `;
+
+      const result = await connection.query(query);
+      const tableNames = result.rows.map(row => row.table_name);
+      
+      // Cache the results
+      this.schemaCache.set('tables', tableNames);
+      
+      return tableNames;
+    } catch (error) {
+      logger.warn(`Could not discover tables: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Gets comprehensive schema information for a table
+   * @param {Object} connection - Database connection
+   * @param {string} tableName - Name of the table
+   * @returns {Promise<Object>} Complete table schema information
+   */
+  async getTableSchemaInfo(connection, tableName) {
+    const [columns, foreignKeys] = await Promise.all([
+      this.discoverTableSchema(connection, tableName),
+      this.discoverForeignKeys(connection, tableName)
+    ]);
+
+    return {
+      tableName,
+      columns,
+      foreignKeys,
+      enumColumns: columns.filter(col => col.udt_name && this.schemaCache.get('enums')?.[col.udt_name])
+    };
   }
 
   /**
    * Clears the schema cache
-   * @param {string} tableName - Optional table name to clear specific cache
+   * @param {string} key - Optional specific key to clear
    */
-  clearCache(tableName = null) {
-    if (tableName) {
-      this.schemaCache.delete(tableName);
+  clearCache(key = null) {
+    if (key) {
+      this.schemaCache.delete(key);
     } else {
       this.schemaCache.clear();
-      this.enumCache.clear();
     }
   }
 
@@ -116,9 +200,8 @@ class SchemaDiscoveryService {
    */
   getCacheStats() {
     return {
-      enumCacheSize: this.enumCache.size,
-      schemaCacheSize: this.schemaCache.size,
-      cachedTables: Array.from(this.schemaCache.keys())
+      cacheSize: this.schemaCache.size,
+      cachedKeys: Array.from(this.schemaCache.keys())
     };
   }
 }

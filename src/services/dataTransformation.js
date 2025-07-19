@@ -9,16 +9,17 @@ class DataTransformationService {
     this.transformationStats = {
       totalTransformations: 0,
       enumTransformations: 0,
-      nullTransformations: 0
+      nullTransformations: 0,
+      typeConversions: 0
     };
   }
 
   /**
-   * Transforms data for a specific table based on discovered schema
+   * Transforms table data to match PostgreSQL schema
    * @param {Object} connection - Database connection
    * @param {string} tableName - Name of the table
-   * @param {Array} data - Data to transform
-   * @param {Object} enumMap - Map of enum types and their valid values
+   * @param {Array} data - Raw data from source
+   * @param {Object} enumMap - Map of enum types to valid values
    * @returns {Promise<Array>} Transformed data
    */
   async transformTableData(connection, tableName, data, enumMap) {
@@ -26,187 +27,231 @@ class DataTransformationService {
       return data;
     }
 
-    // Get enum columns for this table
-    const enumColumns = await schemaDiscoveryService.getEnumColumns(connection, tableName, enumMap);
+    // Get table schema information
+    const schema = await schemaDiscoveryService.discoverTableSchema(connection, tableName);
+    const enumColumns = schema.filter(col => col.udt_name && enumMap[col.udt_name]);
     
     if (enumColumns.length === 0) {
-      return data; // No enum columns to transform
+      return data; // No transformations needed
     }
 
-    // Transform data to handle enum values
-    const transformedData = data.map(row => {
-      const transformedRow = { ...row };
-
-      enumColumns.forEach(col => {
-        const columnName = col.column_name;
-        const enumName = col.udt_name;
-        const validValues = enumMap[enumName] || [];
-
-        if (transformedRow[columnName] !== null && transformedRow[columnName] !== undefined) {
-          const currentValue = transformedRow[columnName];
-
-          // Check if current value is valid
-          if (!validValues.includes(currentValue)) {
-            const transformedValue = this.transformEnumValue(
-              currentValue, 
-              validValues, 
-              tableName, 
-              columnName
-            );
-            
-            if (transformedValue !== currentValue) {
-              transformedRow[columnName] = transformedValue;
-              this.transformationStats.enumTransformations++;
-            }
-          }
-        }
-      });
-
-      return transformedRow;
-    });
-
-    this.transformationStats.totalTransformations += transformedData.length;
+    // Transform each row
+    const transformedData = data.map(row => this.transformRow(row, enumColumns, enumMap, tableName));
+    
+    logger.debug(`Transformed ${transformedData.length} rows for table ${tableName}`);
     return transformedData;
   }
 
   /**
-   * Transforms a single enum value to match valid values
+   * Transforms a single row of data
+   * @param {Object} row - Data row
+   * @param {Array} enumColumns - Columns with enum types
+   * @param {Object} enumMap - Map of enum types to valid values
+   * @param {string} tableName - Name of the table (for logging)
+   * @returns {Object} Transformed row
+   */
+  transformRow(row, enumColumns, enumMap, tableName) {
+    const transformedRow = { ...row };
+    
+    enumColumns.forEach(col => {
+      const columnName = col.column_name;
+      const enumName = col.udt_name;
+      const validValues = enumMap[enumName] || [];
+      
+      if (transformedRow[columnName] !== null && transformedRow[columnName] !== undefined) {
+        const currentValue = transformedRow[columnName];
+        
+        // Check if current value is valid
+        if (!validValues.includes(currentValue)) {
+          const transformedValue = this.transformEnumValue(currentValue, validValues, tableName, columnName);
+          transformedRow[columnName] = transformedValue;
+          this.transformationStats.enumTransformations++;
+        }
+      }
+    });
+    
+    this.transformationStats.totalTransformations++;
+    return transformedRow;
+  }
+
+  /**
+   * Transforms an enum value to match valid PostgreSQL enum values
    * @param {string} currentValue - Current enum value
-   * @param {Array} validValues - Array of valid enum values
-   * @param {string} tableName - Table name for logging
-   * @param {string} columnName - Column name for logging
+   * @param {Array} validValues - Valid enum values
+   * @param {string} tableName - Table name (for logging)
+   * @param {string} columnName - Column name (for logging)
    * @returns {string|null} Transformed enum value
    */
   transformEnumValue(currentValue, validValues, tableName, columnName) {
-    logger.debug(`Invalid enum value '${currentValue}' for ${tableName}.${columnName}, valid values: ${validValues.join(', ')}`);
-
-    // Try to find a close match (case insensitive)
-    const closeMatch = validValues.find(valid => 
-      valid.toLowerCase() === currentValue.toLowerCase()
-    );
-
-    if (closeMatch) {
-      logger.debug(`Mapped '${currentValue}' to '${closeMatch}' for ${tableName}.${columnName}`);
-      return closeMatch;
+    // Try exact match (case sensitive)
+    if (validValues.includes(currentValue)) {
+      return currentValue;
     }
 
-    // Try partial matching for common patterns
-    const partialMatch = this.findPartialMatch(currentValue, validValues);
+    // Try case insensitive match
+    const caseInsensitiveMatch = validValues.find(valid => 
+      valid.toLowerCase() === currentValue.toLowerCase()
+    );
+    
+    if (caseInsensitiveMatch) {
+      logger.debug(`Case-insensitive match: '${currentValue}' -> '${caseInsensitiveMatch}' for ${tableName}.${columnName}`);
+      return caseInsensitiveMatch;
+    }
+
+    // Try partial match (contains)
+    const partialMatch = validValues.find(valid => 
+      valid.toLowerCase().includes(currentValue.toLowerCase()) ||
+      currentValue.toLowerCase().includes(valid.toLowerCase())
+    );
+    
     if (partialMatch) {
-      logger.debug(`Partial match '${currentValue}' to '${partialMatch}' for ${tableName}.${columnName}`);
+      logger.debug(`Partial match: '${currentValue}' -> '${partialMatch}' for ${tableName}.${columnName}`);
       return partialMatch;
     }
 
-    // Use the first valid value as default
+    // Try common enum value mappings
+    const commonMappings = this.getCommonEnumMappings();
+    const mappedValue = commonMappings[currentValue.toLowerCase()];
+    
+    if (mappedValue && validValues.includes(mappedValue)) {
+      logger.debug(`Common mapping: '${currentValue}' -> '${mappedValue}' for ${tableName}.${columnName}`);
+      return mappedValue;
+    }
+
+    // Default to first valid value if available
     if (validValues.length > 0) {
-      const defaultValue = validValues[0];
-      logger.debug(`Defaulted '${currentValue}' to '${defaultValue}' for ${tableName}.${columnName}`);
-      this.transformationStats.nullTransformations++;
-      return defaultValue;
+      logger.debug(`Default mapping: '${currentValue}' -> '${validValues[0]}' for ${tableName}.${columnName}`);
+      return validValues[0];
     }
 
     // Set to null if no valid values
-    logger.warn(`No valid enum values found for ${tableName}.${columnName}, setting to null`);
+    logger.warn(`No valid enum mapping found for '${currentValue}' in ${tableName}.${columnName}, setting to null`);
     this.transformationStats.nullTransformations++;
     return null;
   }
 
   /**
-   * Finds partial matches for enum values using common patterns
-   * @param {string} currentValue - Current enum value
-   * @param {Array} validValues - Array of valid enum values
-   * @returns {string|null} Matched enum value or null
+   * Gets common enum value mappings for automatic transformation
+   * @returns {Object} Map of common enum value transformations
    */
-  findPartialMatch(currentValue, validValues) {
-    const current = currentValue.toLowerCase();
-
-    // Try to find values that contain the current value or vice versa
-    for (const valid of validValues) {
-      const validLower = valid.toLowerCase();
+  getCommonEnumMappings() {
+    return {
+      // Common activity/target type mappings
+      'activity': 'INDIVIDUAL',
+      'user': 'INDIVIDUAL',
+      'individual': 'INDIVIDUAL',
+      'group': 'GROUP',
+      'all': 'ALL',
+      'everyone': 'ALL',
       
-      // Check if current value is contained in valid value
-      if (validLower.includes(current) || current.includes(validLower)) {
-        return valid;
-      }
-
-      // Check for common abbreviations and expansions
-      if (this.isCommonAbbreviation(current, validLower)) {
-        return valid;
-      }
-    }
-
-    return null;
+      // Common page type mappings
+      'event_details': 'EVENT',
+      'event': 'EVENT',
+      'news_details': 'NEWS',
+      'news': 'NEWS',
+      'profile': 'PROFILE',
+      'home': 'HOME',
+      'dashboard': 'HOME',
+      
+      // Common status mappings
+      'active': 'ACTIVE',
+      'inactive': 'INACTIVE',
+      'enabled': 'ACTIVE',
+      'disabled': 'INACTIVE',
+      'on': 'ACTIVE',
+      'off': 'INACTIVE',
+      
+      // Common boolean-like mappings
+      'true': 'TRUE',
+      'false': 'FALSE',
+      'yes': 'TRUE',
+      'no': 'FALSE',
+      '1': 'TRUE',
+      '0': 'FALSE'
+    };
   }
 
   /**
-   * Checks if two values are common abbreviations of each other
-   * @param {string} value1 - First value
-   * @param {string} value2 - Second value
-   * @returns {boolean} True if they are common abbreviations
+   * Transforms data types for better PostgreSQL compatibility
+   * @param {any} value - Value to transform
+   * @param {string} targetType - Target PostgreSQL type
+   * @returns {any} Transformed value
    */
-  isCommonAbbreviation(value1, value2) {
-    const abbreviations = {
-      'activity': ['act', 'activities'],
-      'individual': ['ind', 'person', 'user'],
-      'group': ['grp', 'team'],
-      'event': ['evt', 'event_details'],
-      'news': ['news_details'],
-      'notification': ['notif', 'notify']
-    };
-
-    for (const [full, abbrevs] of Object.entries(abbreviations)) {
-      if ((value1 === full && abbrevs.includes(value2)) ||
-          (value2 === full && abbrevs.includes(value1))) {
-        return true;
-      }
+  transformDataType(value, targetType) {
+    if (value === null || value === undefined) {
+      return null;
     }
 
-    return false;
+    try {
+      switch (targetType.toLowerCase()) {
+        case 'integer':
+        case 'bigint':
+        case 'smallint':
+          const intValue = parseInt(value);
+          return isNaN(intValue) ? null : intValue;
+          
+        case 'numeric':
+        case 'decimal':
+        case 'real':
+        case 'double precision':
+          const numValue = parseFloat(value);
+          return isNaN(numValue) ? null : numValue;
+          
+        case 'boolean':
+          if (typeof value === 'boolean') return value;
+          const strValue = String(value).toLowerCase();
+          return ['true', '1', 'yes', 'on', 't', 'y'].includes(strValue);
+          
+        case 'date':
+        case 'timestamp':
+        case 'timestamptz':
+          if (value instanceof Date) return value;
+          const dateValue = new Date(value);
+          return isNaN(dateValue.getTime()) ? null : dateValue;
+          
+        case 'json':
+        case 'jsonb':
+          if (typeof value === 'object') return JSON.stringify(value);
+          return value;
+          
+        default:
+          // For text, varchar, and other string types
+          return String(value);
+      }
+    } catch (error) {
+      logger.warn(`Type conversion failed for value '${value}' to type '${targetType}': ${error.message}`);
+      this.transformationStats.typeConversions++;
+      return null;
+    }
   }
 
   /**
    * Validates transformed data against schema constraints
-   * @param {Object} connection - Database connection
-   * @param {string} tableName - Name of the table
-   * @param {Array} data - Data to validate
-   * @returns {Promise<Object>} Validation result
+   * @param {Array} data - Transformed data
+   * @param {Array} schema - Table schema information
+   * @returns {Object} Validation result
    */
-  async validateTransformedData(connection, tableName, data) {
-    if (!data || data.length === 0) {
-      return { valid: true, issues: [] };
-    }
-
-    const schema = await schemaDiscoveryService.discoverTableSchema(connection, tableName);
+  validateTransformedData(data, schema) {
     const issues = [];
-
-    // Sample validation on first few rows
-    const sampleSize = Math.min(data.length, 10);
+    const requiredColumns = schema.filter(col => col.is_nullable === 'NO' && !col.column_default);
     
-    for (let i = 0; i < sampleSize; i++) {
-      const row = data[i];
-      
-      for (const column of schema) {
-        const value = row[column.column_name];
-        
-        // Check for null values in non-nullable columns
-        if (value === null || value === undefined) {
-          if (column.is_nullable === 'NO' && !column.column_default) {
-            issues.push({
-              type: 'null_constraint_violation',
-              table: tableName,
-              column: column.column_name,
-              row: i,
-              message: `Null value in non-nullable column '${column.column_name}'`
-            });
-          }
+    data.forEach((row, index) => {
+      requiredColumns.forEach(col => {
+        if (row[col.column_name] === null || row[col.column_name] === undefined) {
+          issues.push({
+            type: 'null_constraint_violation',
+            row: index,
+            column: col.column_name,
+            message: `Required column '${col.column_name}' cannot be null`
+          });
         }
-      }
-    }
+      });
+    });
 
     return {
       valid: issues.length === 0,
       issues,
-      sampledRows: sampleSize
+      validatedRows: data.length
     };
   }
 
@@ -225,7 +270,8 @@ class DataTransformationService {
     this.transformationStats = {
       totalTransformations: 0,
       enumTransformations: 0,
-      nullTransformations: 0
+      nullTransformations: 0,
+      typeConversions: 0
     };
   }
 }

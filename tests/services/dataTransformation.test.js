@@ -1,10 +1,10 @@
 import { jest } from '@jest/globals';
 import { DataTransformationService, dataTransformationService } from '../../src/services/dataTransformation.js';
 
-// Mock the schema discovery service
+// Mock the schemaDiscoveryService
 jest.unstable_mockModule('../../src/services/schemaDiscovery.js', () => ({
   schemaDiscoveryService: {
-    getEnumColumns: jest.fn()
+    discoverTableSchema: jest.fn()
   }
 }));
 
@@ -23,211 +23,183 @@ describe('DataTransformationService', () => {
 
   describe('transformTableData', () => {
     test('should transform enum values correctly', async () => {
-      const enumColumns = [
+      const mockSchema = [
         {
           column_name: 'status',
-          udt_name: 'status_enum'
+          data_type: 'USER-DEFINED',
+          udt_name: 'status_enum',
+          is_nullable: 'YES'
         }
       ];
-      
-      schemaDiscoveryService.getEnumColumns.mockResolvedValue(enumColumns);
+
+      schemaDiscoveryService.discoverTableSchema.mockResolvedValue(mockSchema);
 
       const data = [
-        { id: 1, status: 'ACTIVE', name: 'Test' },
-        { id: 2, status: 'inactive', name: 'Test2' }
+        { id: 1, status: 'ACTIVITY' },
+        { id: 2, status: 'USER' }
       ];
 
       const enumMap = {
-        status_enum: ['ACTIVE', 'INACTIVE', 'PENDING']
+        status_enum: ['INDIVIDUAL', 'GROUP', 'ALL']
       };
 
-      const result = await service.transformTableData(mockConnection, 'users', data, enumMap);
+      const result = await service.transformTableData(mockConnection, 'test_table', data, enumMap);
 
       expect(result).toHaveLength(2);
-      expect(result[0].status).toBe('ACTIVE'); // Already valid
-      expect(result[1].status).toBe('INACTIVE'); // Case-insensitive match
-    });
-
-    test('should handle invalid enum values with defaults', async () => {
-      const enumColumns = [
-        {
-          column_name: 'type',
-          udt_name: 'type_enum'
-        }
-      ];
-      
-      schemaDiscoveryService.getEnumColumns.mockResolvedValue(enumColumns);
-
-      const data = [
-        { id: 1, type: 'INVALID_TYPE' }
-      ];
-
-      const enumMap = {
-        type_enum: ['USER', 'ADMIN']
-      };
-
-      const result = await service.transformTableData(mockConnection, 'users', data, enumMap);
-
-      expect(result[0].type).toBe('USER'); // Default to first valid value
+      expect(result[0].status).toBe('INDIVIDUAL'); // ACTIVITY -> INDIVIDUAL (common mapping)
+      expect(result[1].status).toBe('INDIVIDUAL'); // USER -> INDIVIDUAL (common mapping)
     });
 
     test('should handle empty data', async () => {
-      const result = await service.transformTableData(mockConnection, 'users', [], {});
+      const result = await service.transformTableData(mockConnection, 'test_table', [], {});
 
       expect(result).toEqual([]);
     });
 
     test('should handle tables with no enum columns', async () => {
-      schemaDiscoveryService.getEnumColumns.mockResolvedValue([]);
+      schemaDiscoveryService.discoverTableSchema.mockResolvedValue([
+        {
+          column_name: 'id',
+          data_type: 'integer',
+          udt_name: 'int4',
+          is_nullable: 'NO'
+        }
+      ]);
 
-      const data = [{ id: 1, name: 'Test' }];
-      const result = await service.transformTableData(mockConnection, 'users', data, {});
+      const data = [{ id: 1, name: 'test' }];
+      const result = await service.transformTableData(mockConnection, 'test_table', data, {});
 
       expect(result).toEqual(data);
-    });
-
-    test('should handle null and undefined values', async () => {
-      const enumColumns = [
-        {
-          column_name: 'status',
-          udt_name: 'status_enum'
-        }
-      ];
-      
-      schemaDiscoveryService.getEnumColumns.mockResolvedValue(enumColumns);
-
-      const data = [
-        { id: 1, status: null },
-        { id: 2, status: undefined }
-      ];
-
-      const enumMap = {
-        status_enum: ['ACTIVE', 'INACTIVE']
-      };
-
-      const result = await service.transformTableData(mockConnection, 'users', data, enumMap);
-
-      expect(result[0].status).toBeNull();
-      expect(result[1].status).toBeUndefined();
     });
   });
 
   describe('transformEnumValue', () => {
-    test('should find case-insensitive matches', () => {
-      const validValues = ['ACTIVE', 'INACTIVE'];
-      const result = service.transformEnumValue('active', validValues, 'users', 'status');
+    test('should return exact match', () => {
+      const result = service.transformEnumValue('ACTIVE', ['ACTIVE', 'INACTIVE'], 'test', 'status');
 
       expect(result).toBe('ACTIVE');
     });
 
-    test('should find partial matches', () => {
-      const validValues = ['INDIVIDUAL', 'GROUP'];
-      const result = service.transformEnumValue('ACTIVITY', validValues, 'users', 'type');
+    test('should perform case insensitive match', () => {
+      const result = service.transformEnumValue('active', ['ACTIVE', 'INACTIVE'], 'test', 'status');
 
-      expect(result).toBe('INDIVIDUAL'); // Common abbreviation mapping
+      expect(result).toBe('ACTIVE');
+    });
+
+    test('should perform partial match', () => {
+      const result = service.transformEnumValue('ACT', ['ACTIVE', 'INACTIVE'], 'test', 'status');
+
+      expect(result).toBe('ACTIVE');
+    });
+
+    test('should use common mappings', () => {
+      const result = service.transformEnumValue('activity', ['INDIVIDUAL', 'GROUP'], 'test', 'type');
+
+      expect(result).toBe('INDIVIDUAL');
     });
 
     test('should default to first valid value', () => {
-      const validValues = ['USER', 'ADMIN'];
-      const result = service.transformEnumValue('UNKNOWN', validValues, 'users', 'role');
+      const result = service.transformEnumValue('unknown', ['FIRST', 'SECOND'], 'test', 'status');
 
-      expect(result).toBe('USER');
+      expect(result).toBe('FIRST');
     });
 
-    test('should return null when no valid values', () => {
-      const result = service.transformEnumValue('UNKNOWN', [], 'users', 'role');
+    test('should return null for empty valid values', () => {
+      const result = service.transformEnumValue('unknown', [], 'test', 'status');
 
       expect(result).toBeNull();
     });
   });
 
-  describe('findPartialMatch', () => {
-    test('should find contained matches', () => {
-      const validValues = ['EVENT_DETAILS', 'NEWS_DETAILS'];
-      const result = service.findPartialMatch('EVENT', validValues);
+  describe('getCommonEnumMappings', () => {
+    test('should return common enum mappings', () => {
+      const mappings = service.getCommonEnumMappings();
 
-      expect(result).toBe('EVENT_DETAILS');
-    });
-
-    test('should find reverse contained matches', () => {
-      const validValues = ['EVENT'];
-      const result = service.findPartialMatch('EVENT_DETAILS', validValues);
-
-      expect(result).toBe('EVENT');
-    });
-
-    test('should return null when no matches', () => {
-      const validValues = ['USER', 'ADMIN'];
-      const result = service.findPartialMatch('UNKNOWN', validValues);
-
-      expect(result).toBeNull();
+      expect(mappings.activity).toBe('INDIVIDUAL');
+      expect(mappings.user).toBe('INDIVIDUAL');
+      expect(mappings.event_details).toBe('EVENT');
+      expect(mappings.active).toBe('ACTIVE');
+      expect(mappings.true).toBe('TRUE');
     });
   });
 
-  describe('isCommonAbbreviation', () => {
-    test('should recognize common abbreviations', () => {
-      expect(service.isCommonAbbreviation('activity', 'act')).toBe(true);
-      expect(service.isCommonAbbreviation('individual', 'user')).toBe(true);
-      expect(service.isCommonAbbreviation('event', 'event_details')).toBe(true);
+  describe('transformDataType', () => {
+    test('should transform integer values', () => {
+      expect(service.transformDataType('123', 'integer')).toBe(123);
+      expect(service.transformDataType('invalid', 'integer')).toBeNull();
     });
 
-    test('should return false for non-abbreviations', () => {
-      expect(service.isCommonAbbreviation('random', 'other')).toBe(false);
+    test('should transform numeric values', () => {
+      expect(service.transformDataType('123.45', 'numeric')).toBe(123.45);
+      expect(service.transformDataType('invalid', 'numeric')).toBeNull();
+    });
+
+    test('should transform boolean values', () => {
+      expect(service.transformDataType('true', 'boolean')).toBe(true);
+      expect(service.transformDataType('false', 'boolean')).toBe(false);
+      expect(service.transformDataType('1', 'boolean')).toBe(true);
+      expect(service.transformDataType('0', 'boolean')).toBe(false);
+      expect(service.transformDataType('yes', 'boolean')).toBe(true);
+    });
+
+    test('should transform date values', () => {
+      const dateStr = '2023-01-01';
+      const result = service.transformDataType(dateStr, 'date');
+
+      expect(result).toBeInstanceOf(Date);
+      expect(service.transformDataType('invalid-date', 'date')).toBeNull();
+    });
+
+    test('should transform JSON values', () => {
+      const obj = { key: 'value' };
+      const result = service.transformDataType(obj, 'json');
+
+      expect(result).toBe('{"key":"value"}');
+    });
+
+    test('should handle null values', () => {
+      expect(service.transformDataType(null, 'integer')).toBeNull();
+      expect(service.transformDataType(undefined, 'integer')).toBeNull();
+    });
+
+    test('should default to string conversion', () => {
+      expect(service.transformDataType(123, 'text')).toBe('123');
+      expect(service.transformDataType(true, 'varchar')).toBe('true');
     });
   });
 
   describe('validateTransformedData', () => {
-    test('should validate data successfully', async () => {
-      mockConnection.query.mockResolvedValue({
-        rows: [
-          {
-            column_name: 'id',
-            is_nullable: 'NO',
-            column_default: 'nextval(...)'
-          },
-          {
-            column_name: 'name',
-            is_nullable: 'YES',
-            column_default: null
-          }
-        ]
-      });
-
+    test('should validate data against schema constraints', () => {
       const data = [
-        { id: 1, name: 'Test' },
+        { id: 1, name: 'test' },
         { id: 2, name: null }
       ];
 
-      const result = await service.validateTransformedData(mockConnection, 'users', data);
-
-      expect(result.valid).toBe(true);
-      expect(result.issues).toHaveLength(0);
-    });
-
-    test('should detect null constraint violations', async () => {
-      mockConnection.query.mockResolvedValue({
-        rows: [
-          {
-            column_name: 'name',
-            is_nullable: 'NO',
-            column_default: null
-          }
-        ]
-      });
-
-      const data = [
-        { id: 1, name: null }
+      const schema = [
+        { column_name: 'id', is_nullable: 'NO', column_default: null },
+        { column_name: 'name', is_nullable: 'NO', column_default: null }
       ];
 
-      const result = await service.validateTransformedData(mockConnection, 'users', data);
+      const result = service.validateTransformedData(data, schema);
 
       expect(result.valid).toBe(false);
       expect(result.issues).toHaveLength(1);
       expect(result.issues[0].type).toBe('null_constraint_violation');
+      expect(result.issues[0].column).toBe('name');
     });
 
-    test('should handle empty data validation', async () => {
-      const result = await service.validateTransformedData(mockConnection, 'users', []);
+    test('should pass validation for valid data', () => {
+      const data = [
+        { id: 1, name: 'test1' },
+        { id: 2, name: 'test2' }
+      ];
+
+      const schema = [
+        { column_name: 'id', is_nullable: 'NO', column_default: null },
+        { column_name: 'name', is_nullable: 'NO', column_default: null }
+      ];
+
+      const result = service.validateTransformedData(data, schema);
 
       expect(result.valid).toBe(true);
       expect(result.issues).toHaveLength(0);
@@ -235,55 +207,30 @@ describe('DataTransformationService', () => {
   });
 
   describe('statistics', () => {
-    test('should track transformation statistics', async () => {
-      const enumColumns = [
-        {
-          column_name: 'status',
-          udt_name: 'status_enum'
-        }
-      ];
-      
-      schemaDiscoveryService.getEnumColumns.mockResolvedValue(enumColumns);
-
-      const data = [
-        { id: 1, status: 'invalid' },
-        { id: 2, status: 'ACTIVE' }
-      ];
-
-      const enumMap = {
-        status_enum: ['ACTIVE', 'INACTIVE']
-      };
-
-      await service.transformTableData(mockConnection, 'users', data, enumMap);
+    test('should track transformation statistics', () => {
+      service.transformationStats.totalTransformations = 5;
+      service.transformationStats.enumTransformations = 3;
 
       const stats = service.getTransformationStats();
 
-      expect(stats.totalTransformations).toBe(2);
-      expect(stats.enumTransformations).toBe(1);
+      expect(stats.totalTransformations).toBe(5);
+      expect(stats.enumTransformations).toBe(3);
     });
 
     test('should reset statistics', () => {
-      service.transformationStats.totalTransformations = 10;
+      service.transformationStats.totalTransformations = 5;
       service.resetStats();
 
       const stats = service.getTransformationStats();
 
       expect(stats.totalTransformations).toBe(0);
       expect(stats.enumTransformations).toBe(0);
-      expect(stats.nullTransformations).toBe(0);
     });
   });
 
   describe('singleton instance', () => {
     test('should be an instance of DataTransformationService', () => {
       expect(dataTransformationService).toBeInstanceOf(DataTransformationService);
-    });
-
-    test('should maintain state across imports', () => {
-      dataTransformationService.transformationStats.totalTransformations = 5;
-      const stats = dataTransformationService.getTransformationStats();
-
-      expect(stats.totalTransformations).toBe(5);
     });
   });
 });

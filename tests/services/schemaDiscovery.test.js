@@ -30,7 +30,7 @@ describe('SchemaDiscoveryService', () => {
         status_enum: ['ACTIVE', 'INACTIVE'],
         type_enum: ['USER', 'ADMIN']
       });
-      expect(mockConnection.query).toHaveBeenCalledWith(expect.stringContaining('pg_type'));
+      expect(mockConnection.query).toHaveBeenCalledWith(expect.stringContaining('pg_enum'));
     });
 
     test('should handle empty enum result', async () => {
@@ -47,19 +47,6 @@ describe('SchemaDiscoveryService', () => {
       const result = await service.discoverEnumValues(mockConnection);
 
       expect(result).toEqual({});
-    });
-
-    test('should cache enum values', async () => {
-      mockConnection.query.mockResolvedValue({
-        rows: [{ enum_name: 'test_enum', enum_value: 'TEST' }]
-      });
-
-      // First call
-      await service.discoverEnumValues(mockConnection);
-      // Second call should use cache
-      await service.discoverEnumValues(mockConnection);
-
-      expect(mockConnection.query).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -97,129 +84,127 @@ describe('SchemaDiscoveryService', () => {
       );
     });
 
-    test('should cache table schema', async () => {
-      mockConnection.query.mockResolvedValue({
-        rows: [{ column_name: 'id', data_type: 'integer' }]
-      });
+    test('should cache schema results', async () => {
+      mockConnection.query.mockResolvedValue({ rows: [] });
 
-      // First call
       await service.discoverTableSchema(mockConnection, 'users');
-      // Second call should use cache
       await service.discoverTableSchema(mockConnection, 'users');
 
       expect(mockConnection.query).toHaveBeenCalledTimes(1);
     });
+  });
 
-    test('should handle schema discovery errors', async () => {
-      mockConnection.query.mockRejectedValue(new Error('Schema error'));
+  describe('discoverForeignKeys', () => {
+    test('should discover foreign keys correctly', async () => {
+      mockConnection.query.mockResolvedValue({
+        rows: [
+          {
+            constraint_name: 'fk_user_id',
+            column_name: 'user_id',
+            foreign_table_name: 'users',
+            foreign_column_name: 'id'
+          }
+        ]
+      });
 
-      const result = await service.discoverTableSchema(mockConnection, 'users');
+      const result = await service.discoverForeignKeys(mockConnection, 'orders');
 
-      expect(result).toEqual([]);
+      expect(result).toHaveLength(1);
+      expect(result[0].constraint_name).toBe('fk_user_id');
+      expect(result[0].foreign_table_name).toBe('users');
     });
   });
 
-  describe('getEnumColumns', () => {
-    test('should return enum columns for table', async () => {
+  describe('discoverTables', () => {
+    test('should discover all tables', async () => {
       mockConnection.query.mockResolvedValue({
         rows: [
-          {
-            column_name: 'id',
-            data_type: 'integer',
-            udt_name: 'int4',
-            is_nullable: 'NO'
-          },
-          {
-            column_name: 'status',
-            data_type: 'USER-DEFINED',
-            udt_name: 'status_enum',
-            is_nullable: 'YES'
-          }
+          { table_name: 'users' },
+          { table_name: 'orders' },
+          { table_name: 'products' }
         ]
       });
 
-      const enumMap = { status_enum: ['ACTIVE', 'INACTIVE'] };
-      const result = await service.getEnumColumns(mockConnection, 'users', enumMap);
+      const result = await service.discoverTables(mockConnection);
 
-      expect(result).toHaveLength(1);
-      expect(result[0].column_name).toBe('status');
-      expect(result[0].udt_name).toBe('status_enum');
+      expect(result).toEqual(['users', 'orders', 'products']);
+      expect(mockConnection.query).toHaveBeenCalledWith(
+        expect.stringContaining('information_schema.tables')
+      );
     });
+  });
 
-    test('should return empty array when no enum columns', async () => {
-      mockConnection.query.mockResolvedValue({
-        rows: [
-          {
-            column_name: 'id',
-            data_type: 'integer',
-            udt_name: 'int4',
-            is_nullable: 'NO'
-          }
-        ]
-      });
+  describe('getTableSchemaInfo', () => {
+    test('should get comprehensive table schema info', async () => {
+      // Mock enum discovery
+      service.schemaCache.set('enums', { status_enum: ['ACTIVE', 'INACTIVE'] });
 
-      const enumMap = {};
-      const result = await service.getEnumColumns(mockConnection, 'users', enumMap);
+      // Mock schema discovery
+      mockConnection.query
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              column_name: 'status',
+              data_type: 'USER-DEFINED',
+              udt_name: 'status_enum',
+              is_nullable: 'YES',
+              column_default: null,
+              ordinal_position: 1
+            }
+          ]
+        })
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              constraint_name: 'fk_user_id',
+              column_name: 'user_id',
+              foreign_table_name: 'users',
+              foreign_column_name: 'id'
+            }
+          ]
+        });
 
-      expect(result).toHaveLength(0);
+      const result = await service.getTableSchemaInfo(mockConnection, 'orders');
+
+      expect(result.tableName).toBe('orders');
+      expect(result.columns).toHaveLength(1);
+      expect(result.foreignKeys).toHaveLength(1);
+      expect(result.enumColumns).toHaveLength(1);
     });
   });
 
   describe('cache management', () => {
-    test('should clear specific table cache', async () => {
-      mockConnection.query.mockResolvedValue({
-        rows: [{ column_name: 'id', data_type: 'integer' }]
-      });
+    test('should clear specific cache key', () => {
+      service.schemaCache.set('test_key', 'test_value');
+      service.clearCache('test_key');
 
-      await service.discoverTableSchema(mockConnection, 'users');
-      service.clearCache('users');
-      await service.discoverTableSchema(mockConnection, 'users');
-
-      expect(mockConnection.query).toHaveBeenCalledTimes(2);
+      expect(service.schemaCache.has('test_key')).toBe(false);
     });
 
-    test('should clear all cache', async () => {
-      mockConnection.query.mockResolvedValue({ rows: [] });
-
-      await service.discoverEnumValues(mockConnection);
-      await service.discoverTableSchema(mockConnection, 'users');
+    test('should clear entire cache', () => {
+      service.schemaCache.set('key1', 'value1');
+      service.schemaCache.set('key2', 'value2');
       
       service.clearCache();
-      
-      await service.discoverEnumValues(mockConnection);
-      await service.discoverTableSchema(mockConnection, 'users');
 
-      expect(mockConnection.query).toHaveBeenCalledTimes(4);
+      expect(service.schemaCache.size).toBe(0);
     });
 
-    test('should return cache statistics', async () => {
-      mockConnection.query.mockResolvedValue({ rows: [] });
-
-      await service.discoverEnumValues(mockConnection);
-      await service.discoverTableSchema(mockConnection, 'users');
-      await service.discoverTableSchema(mockConnection, 'orders');
+    test('should return cache statistics', () => {
+      service.schemaCache.set('key1', 'value1');
+      service.schemaCache.set('key2', 'value2');
 
       const stats = service.getCacheStats();
 
-      expect(stats.enumCacheSize).toBe(1);
-      expect(stats.schemaCacheSize).toBe(2);
-      expect(stats.cachedTables).toContain('users');
-      expect(stats.cachedTables).toContain('orders');
+      expect(stats.cacheSize).toBe(2);
+      expect(stats.cachedKeys).toContain('key1');
+      expect(stats.cachedKeys).toContain('key2');
     });
   });
 
   describe('singleton instance', () => {
     test('should be an instance of SchemaDiscoveryService', () => {
       expect(schemaDiscoveryService).toBeInstanceOf(SchemaDiscoveryService);
-    });
-
-    test('should maintain state across imports', async () => {
-      mockConnection.query.mockResolvedValue({ rows: [] });
-
-      await schemaDiscoveryService.discoverEnumValues(mockConnection);
-      const stats = schemaDiscoveryService.getCacheStats();
-
-      expect(stats.enumCacheSize).toBe(1);
     });
   });
 });

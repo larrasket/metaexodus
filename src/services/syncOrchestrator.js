@@ -369,6 +369,187 @@ class SyncOrchestratorService {
   }
 
   /**
+   * Performs a dry-run analysis without making changes
+   * @param {Object} credentials - Database credentials
+   * @returns {Promise<Object>} Dry-run analysis result
+   */
+  async performDryRun(credentials) {
+    this.syncStats.startTime = Date.now();
+    this.syncStats.failedTables = [];
+    
+    logger.section('MetaExodus - Dry Run Analysis');
+
+    try {
+      // Authenticate and connect
+      await this.authenticateAndConnect(credentials);
+
+      // Discover and analyze
+      const { tables, dependencies, enumMap } = await this.discoverAndAnalyze();
+
+      // Analyze table sizes
+      const tableCounts = await this.analyzeTableSizes(tables);
+
+      // Perform dry-run analysis
+      const dryRunResult = await this.analyzePlannedChanges(tables, tableCounts, enumMap);
+
+      if (!dryRunResult.success) {
+        return { success: false, error: dryRunResult.error };
+      }
+
+      // Generate dry-run summary
+      this.syncStats.endTime = Date.now();
+      const summary = this.generateDryRunSummary(dryRunResult, tableCounts);
+
+      // Display summary
+      logger.section('Dry Run Summary');
+      logger.table([
+        { 'Metric': 'Total Tables', 'Value': tables.length.toString() },
+        { 'Metric': 'Tables with Data', 'Value': dryRunResult.tablesWithData.toString() },
+        { 'Metric': 'Total Rows to Copy', 'Value': dryRunResult.totalRowsToSync.toLocaleString() },
+        { 'Metric': 'Estimated Duration', 'Value': summary.estimatedDuration },
+        { 'Metric': 'Schema Changes', 'Value': dryRunResult.schemaChanges.toString() },
+        { 'Metric': 'Data Transformations', 'Value': dryRunResult.dataTransformations.toString() }
+      ]);
+
+      if (dryRunResult.potentialIssues.length > 0) {
+        logger.subsection('Potential Issues');
+        dryRunResult.potentialIssues.forEach(issue => {
+          logger.warn(`${issue.table}: ${issue.issue}`);
+        });
+      }
+
+      logger.info('This was a dry run - no changes were made to the database');
+      logger.success('Dry run analysis completed successfully');
+
+      return { success: true, summary, analysis: dryRunResult };
+    } catch (error) {
+      logger.error('Dry run analysis failed', error);
+      return { success: false, error: error.message };
+    } finally {
+      await this.cleanup();
+    }
+  }
+
+  /**
+   * Analyzes planned changes without making them
+   * @param {Array} tables - Tables to analyze
+   * @param {Object} tableCounts - Table row counts
+   * @param {Object} enumMap - Enum mappings
+   * @returns {Promise<Object>} Analysis result
+   */
+  async analyzePlannedChanges(tables, tableCounts, enumMap) {
+    try {
+      logger.subsection('Analyzing Planned Changes');
+      const potentialIssues = [];
+      let tablesWithData = 0;
+      let totalRowsToSync = 0;
+      let schemaChanges = 0;
+      let dataTransformations = 0;
+
+      const localConnection = await connectionService.connectLocal();
+
+      logger.createProgressBar(tables.length, 'Analyzing tables');
+      for (let i = 0; i < tables.length; i++) {
+        const table = tables[i];
+        const rowCount = tableCounts[table.name] || 0;
+
+        logger.updateProgress(i + 1, `${table.name} (${rowCount.toLocaleString()} rows)`);
+
+        if (rowCount > 0) {
+          tablesWithData++;
+          totalRowsToSync += rowCount;
+
+          try {
+            // Sample a few rows to analyze potential transformations
+            const sampleResult = await metabaseService.extractTableData(
+              table.id,
+              table.name,
+              { limit: 10 }
+            );
+
+            if (sampleResult.success && sampleResult.data.length > 0) {
+              // Analyze potential data transformations
+              const transformResult = await dataTransformationService.transformTableData(
+                localConnection,
+                table.name,
+                sampleResult.data,
+                { enumMap, validateOnly: true }
+              );
+
+              if (!transformResult.success) {
+                potentialIssues.push({
+                  table: table.name,
+                  issue: 'Data transformation issues detected',
+                  details: transformResult.issues.map(i => i.message).join(', ')
+                });
+              } else if (transformResult.issues.length > 0) {
+                dataTransformations++;
+                potentialIssues.push({
+                  table: table.name,
+                  issue: `${transformResult.issues.length} data transformation(s) needed`,
+                  details: transformResult.issues.map(i => i.message).join(', ')
+                });
+              }
+            }
+
+            // Check for potential schema issues
+            const schemaInfo = await schemaDiscoveryService.getTableSchemaInfo(localConnection, table.name);
+            if (schemaInfo.enumColumns && schemaInfo.enumColumns.length > 0) {
+              schemaChanges++;
+            }
+
+          } catch (error) {
+            potentialIssues.push({
+              table: table.name,
+              issue: 'Analysis error',
+              details: error.message
+            });
+          }
+        }
+      }
+      logger.stopProgress();
+
+      return {
+        success: true,
+        tablesWithData,
+        totalRowsToSync,
+        schemaChanges,
+        dataTransformations,
+        potentialIssues
+      };
+    } catch (error) {
+      logger.error('Planned changes analysis failed', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Generates a dry-run summary
+   * @param {Object} analysisResult - Analysis result
+   * @param {Object} tableCounts - Table counts
+   * @returns {Object} Dry-run summary
+   */
+  generateDryRunSummary(analysisResult, tableCounts) {
+    const endTime = Date.now();
+    const duration = this.syncStats.startTime ? endTime - this.syncStats.startTime : 0;
+    const durationMinutes = Math.floor(duration / 60000);
+    const durationSeconds = Math.floor((duration % 60000) / 1000);
+    
+    // Estimate sync duration based on row count (rough estimate: 1000 rows per second)
+    const estimatedSyncSeconds = Math.ceil(analysisResult.totalRowsToSync / 1000);
+    const estimatedMinutes = Math.floor(estimatedSyncSeconds / 60);
+    const remainingSeconds = estimatedSyncSeconds % 60;
+
+    return {
+      analysisDuration: `${durationMinutes}m ${durationSeconds}s`,
+      estimatedDuration: `~${estimatedMinutes}m ${remainingSeconds}s`,
+      tablesWithData: analysisResult.tablesWithData,
+      totalRowsToSync: analysisResult.totalRowsToSync,
+      potentialIssues: analysisResult.potentialIssues.length
+    };
+  }
+
+  /**
    * Cleanup resources
    */
   async cleanup() {
