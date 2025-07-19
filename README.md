@@ -28,7 +28,7 @@ local copy of production data for testing and development.
 ### 1. Install
 
 ```bash
-git clone <this-repo>
+git clone https://github.com/larrasket/metaexodus
 cd metaexodus
 yarn install
 ```
