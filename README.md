@@ -9,14 +9,6 @@ your local PostgreSQL. It connects to Metabase via API, grabs all your tables
 and data, then recreates everything locally. Perfect for developers who need a
 local copy of production data for testing and development.
 
-## What it does
-
-- Connects to your Metabase instance
-- Downloads all table structures and data
-- Creates identical tables in your local PostgreSQL
-- Shows progress with nice terminal output
-- Handles errors gracefully with retries
-
 ## Requirements
 
 - Node.js 16+
