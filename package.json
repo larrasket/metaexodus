@@ -7,9 +7,13 @@
   "scripts": {
     "start": "node sync-all.js",
     "sync": "node sync-all.js",
+    "sync-safe": "node scripts/sync-with-exclusions.js",
+    "sync-partial": "node scripts/sync-partial.js",
+    "create-schema": "node scripts/create-schema.js",
     "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
     "test:watch": "NODE_OPTIONS='--experimental-vm-modules' jest --watch",
     "test:coverage": "NODE_OPTIONS='--experimental-vm-modules' jest --coverage",
+    "test:special-chars": "node examples/test-special-chars.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },

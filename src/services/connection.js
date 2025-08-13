@@ -54,10 +54,23 @@ class ConnectionService {
       const localConfig = configManager.getLocalConfig();
       const connectionOptions = localConfig.getConnectionOptions();
 
-      this.localClient = new Client(connectionOptions);
-      await this.localClient.connect();
-
-      return this.localClient;
+      try {
+        this.localClient = new Client(connectionOptions);
+        await this.localClient.connect();
+        return this.localClient;
+      } catch (error) {
+        // If the database does not exist, attempt to create it then reconnect
+        const databaseDoesNotExist = error && (error.code === '3D000' || /database .* does not exist/i.test(error.message));
+        if (databaseDoesNotExist) {
+          logger.warn(`Local database "${localConfig.database}" not found. Attempting to create it...`);
+          await this.createDatabaseIfNotExists();
+          // Retry connect after creating database
+          this.localClient = new Client(connectionOptions);
+          await this.localClient.connect();
+          return this.localClient;
+        }
+        throw error;
+      }
     });
   }
 
@@ -111,6 +124,43 @@ class ConnectionService {
       return this.localPool;
     } catch (error) {
       throw new Error(`Failed to create local database pool: ${error.message}`);
+    }
+  }
+
+  async createDatabaseIfNotExists() {
+    const localConfig = configManager.getLocalConfig();
+    const adminConnectionOptions = {
+      ...localConfig.getConnectionOptions(),
+      database: 'postgres'
+    };
+
+    const adminClient = new Client(adminConnectionOptions);
+    try {
+      await adminClient.connect();
+      const dbName = localConfig.database;
+      const owner = localConfig.username;
+      // Ensure identifier quoting to handle special names
+      const quotedDbName = '"' + dbName.replace(/"/g, '""') + '"';
+      const quotedOwner = '"' + owner.replace(/"/g, '""') + '"';
+
+      // Check existence
+      const existsResult = await adminClient.query(
+        'SELECT 1 FROM pg_database WHERE datname = $1',
+        [dbName]
+      );
+      if (existsResult.rowCount > 0) {
+        logger.info(`Database ${dbName} already exists`);
+        return;
+      }
+
+      // Create database with UTF8 encoding
+      const createSql = `CREATE DATABASE ${quotedDbName} OWNER ${quotedOwner} TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C'`;
+      await adminClient.query(createSql);
+      logger.success ? logger.success(`Created database ${dbName}`) : logger.info(`Created database ${dbName}`);
+    } catch (err) {
+      throw new Error(`Failed to create database: ${err.message}`);
+    } finally {
+      try { await adminClient.end(); } catch {}
     }
   }
 

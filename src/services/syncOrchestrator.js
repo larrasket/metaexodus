@@ -4,6 +4,7 @@ import { connectionService } from './connection.js';
 import { dataService } from './data.js';
 import { schemaDiscoveryService } from './schemaDiscovery.js';
 import { dataTransformationService } from './dataTransformation.js';
+import { schemaCreationService } from './schemaCreation.js';
 
 /**
  * Orchestrates the complete database synchronization process
@@ -98,8 +99,13 @@ class SyncOrchestratorService {
     this.syncStats.totalTables = tables.length;
     logger.stopSpinner(true, `Found ${tables.length} tables to synchronize`);
 
-    logger.startSpinner('Analyzing table dependencies');
+    // Ensure schema exists/updated locally before any data operations
+    logger.startSpinner('Ensuring local schema (creating database objects)');
     const localConnection = await connectionService.connectLocal();
+    await schemaCreationService.ensureSchema(localConnection, tables);
+    logger.stopSpinner(true, 'Local schema ensured');
+
+    logger.startSpinner('Analyzing table dependencies');
     const dependencies = await dataService.getTableDependencies(localConnection);
     logger.stopSpinner(true, 'Table dependencies analyzed');
 
