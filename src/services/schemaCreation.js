@@ -41,7 +41,8 @@ class SchemaCreationService {
         continue;
       }
 
-      const changed = await this.addMissingColumns(connection, table);
+      // Align existing columns (upgrade to JSONB when needed) and add missing ones
+      const changed = await this.alignAndExtendColumns(connection, table);
       if (changed > 0) altered += changed;
     }
 
@@ -56,6 +57,52 @@ class SchemaCreationService {
     }
 
     return { created, altered };
+  }
+
+  async getColumnDefinitions(connection, tableName) {
+    const result = await connection.query(
+      `SELECT column_name, data_type, udt_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = $1`,
+      [tableName]
+    );
+    const map = new Map();
+    for (const row of result.rows) {
+      map.set(row.column_name, { data_type: row.data_type, udt_name: row.udt_name });
+    }
+    return map;
+  }
+
+  async alignAndExtendColumns(connection, table) {
+    let changed = 0;
+    const existingCols = await this.getExistingColumns(connection, table.name);
+    const existingDefs = await this.getColumnDefinitions(connection, table.name);
+
+    // Upgrade existing columns to JSONB when Metabase marks them as arrays/JSON
+    for (const field of (table.fields || [])) {
+      const targetType = this.mapMetabaseTypeToPostgres(field.base_type);
+      if (!existingCols.has(String(field.name))) continue;
+      if (targetType === 'JSONB') {
+        const info = existingDefs.get(String(field.name));
+        const isJson = info && (info.data_type && info.data_type.toLowerCase().includes('json'));
+        if (!isJson) {
+          const colName = '"' + String(field.name).replace(/"/g, '""') + '"';
+          const tableName = '"' + String(table.name).replace(/"/g, '""') + '"';
+          const sql = `ALTER TABLE ${tableName} ALTER COLUMN ${colName} TYPE JSONB USING to_jsonb(${colName});`;
+          try {
+            await connection.query(sql);
+            changed++;
+            logger.info(`Altered ${table.name}.${field.name} to JSONB`);
+          } catch (e) {
+            logger.warn(`Could not alter ${table.name}.${field.name} to JSONB: ${e.message}`);
+          }
+        }
+      }
+    }
+
+    // Add missing columns
+    changed += await this.addMissingColumns(connection, table);
+    return changed;
   }
 
   async tableExists(connection, tableName) {
