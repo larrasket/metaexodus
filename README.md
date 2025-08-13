@@ -12,7 +12,7 @@ local copy of production data for testing and development.
 ## Requirements
 
 - Node.js 16+
-- PostgreSQL running locally (with the same schema)
+- PostgreSQL running locally (database will be created automatically)
 - Access to a Metabase instance
 
 ## Quick Start
@@ -95,6 +95,6 @@ yarn lint:fix
 
 ### Current Limitations
 
-- Requires existing database schema (can't create the database for you)
+- Auto-creates the database and ensures schema; complex nested structures are stored as JSONB
 - Only works with PostgreSQL locally
 - No way to exclude sensitive tables or columns

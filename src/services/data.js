@@ -451,13 +451,22 @@ class DataService {
     batch.forEach(row => {
       validColumns.forEach(col => {
         let value = row[col];
-        // Handle undefined/null values
         if (value === undefined) {
           value = null;
         }
-        // Convert empty strings to null for better PostgreSQL compatibility
         if (value === '') {
           value = null;
+        }
+        // Normalize arrays/objects to JSON strings to fit JSONB columns
+        if (Array.isArray(value) || (value && typeof value === 'object')) {
+          value = JSON.stringify(value);
+        }
+        // If a string looks like JSON array/object, pass as-is for JSONB
+        if (typeof value === 'string') {
+          const t = value.trim();
+          if ((t.startsWith('[') && t.endsWith(']')) || (t.startsWith('{') && t.endsWith('}'))) {
+            value = t;
+          }
         }
         values.push(value);
       });

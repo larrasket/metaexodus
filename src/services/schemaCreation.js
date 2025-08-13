@@ -13,7 +13,8 @@ class SchemaCreationService {
       'type/Decimal': 'DECIMAL',
       'type/BigInteger': 'BIGINT',
       'type/SerializedJSON': 'JSONB',
-      'type/Array': 'TEXT[]',
+      // Metabase often sends arrays as JSON strings; store as JSONB for compatibility
+      'type/Array': 'JSONB',
       'type/UUID': 'UUID'
     };
   }
