@@ -43,11 +43,14 @@ class MetabaseService {
     }
 
     try {
-      const response = await axios.get(`${this.baseURL}/api/database/${this.databaseId}`, {
-        headers: {
-          'X-Metabase-Session': this.sessionToken
+      const response = await axios.get(
+        `${this.baseURL}/api/database/${this.databaseId}`,
+        {
+          headers: {
+            'X-Metabase-Session': this.sessionToken
+          }
         }
-      });
+      );
 
       return {
         success: true,
@@ -67,27 +70,31 @@ class MetabaseService {
     }
 
     try {
-      const response = await axios.get(`${this.baseURL}/api/database/${this.databaseId}/metadata`, {
-        headers: {
-          'X-Metabase-Session': this.sessionToken
+      const response = await axios.get(
+        `${this.baseURL}/api/database/${this.databaseId}/metadata`,
+        {
+          headers: {
+            'X-Metabase-Session': this.sessionToken
+          }
         }
-      });
+      );
 
       const tables = response.data.tables || [];
       return {
         success: true,
-        tables: tables.map(table => ({
+        tables: tables.map((table) => ({
           id: table.id,
           name: table.name,
           display_name: table.display_name,
           schema: table.schema,
-          fields: table.fields?.map(field => ({
-            id: field.id,
-            name: field.name,
-            display_name: field.display_name,
-            base_type: field.base_type,
-            semantic_type: field.semantic_type
-          })) || []
+          fields:
+            table.fields?.map((field) => ({
+              id: field.id,
+              name: field.name,
+              display_name: field.display_name,
+              base_type: field.base_type,
+              semantic_type: field.semantic_type
+            })) || []
         }))
       };
     } catch (error) {
@@ -103,7 +110,8 @@ class MetabaseService {
       throw new Error('Not authenticated. Call authenticate() first.');
     }
 
-    const { limit = parseInt(process.env.DB_BATCH_SIZE) || 1000, offset = 0 } = options;
+    const { limit = parseInt(process.env.DB_BATCH_SIZE) || 1000, offset = 0 } =
+      options;
 
     try {
       const query = {
@@ -131,13 +139,13 @@ class MetabaseService {
 
       const data = response.data;
 
-      const columns = data.data.cols.map(col => ({
+      const columns = data.data.cols.map((col) => ({
         name: col.name,
         display_name: col.display_name,
         base_type: col.base_type
       }));
 
-      const rows = data.data.rows.map(row => {
+      const rows = data.data.rows.map((row) => {
         const rowObj = {};
         columns.forEach((col, index) => {
           rowObj[col.name] = row[index];
@@ -215,8 +223,6 @@ class MetabaseService {
       let allData = [];
       let extractedRows = 0;
 
-
-
       for (let offset = 0; offset < totalRows; offset += batchSize) {
         const batchResult = await this.queryTable(tableId, {
           limit: batchSize,
@@ -241,8 +247,6 @@ class MetabaseService {
             progress: (extractedRows / totalRows) * 100
           });
         }
-
-
 
         if (batchData.length < batchSize) {
           break;

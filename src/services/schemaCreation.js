@@ -21,7 +21,7 @@ class SchemaCreationService {
 
   mapMetabaseTypeToPostgres(metabaseType) {
     return this.typeMap[metabaseType] || 'TEXT';
-    }
+  }
 
   async ensureSchema(connection, tables) {
     if (!tables || tables.length === 0) {
@@ -37,20 +37,28 @@ class SchemaCreationService {
       const exists = await this.tableExists(connection, tableName);
       if (!exists) {
         const ok = await this.createTable(connection, table);
-        if (ok) created++;
+        if (ok) {
+          created++;
+        }
         continue;
       }
 
       // Align existing columns (upgrade to JSONB when needed) and add missing ones
       const changed = await this.alignAndExtendColumns(connection, table);
-      if (changed > 0) altered += changed;
+      if (changed > 0) {
+        altered += changed;
+      }
     }
 
     if (created > 0 || altered > 0) {
       if (logger.success) {
-        logger.success(`Schema ensured. Created ${created} tables, added ${altered} columns`);
+        logger.success(
+          `Schema ensured. Created ${created} tables, added ${altered} columns`
+        );
       } else {
-        logger.info(`Schema ensured. Created ${created} tables, added ${altered} columns`);
+        logger.info(
+          `Schema ensured. Created ${created} tables, added ${altered} columns`
+        );
       }
     } else {
       logger.info('Schema is up to date');
@@ -68,7 +76,10 @@ class SchemaCreationService {
     );
     const map = new Map();
     for (const row of result.rows) {
-      map.set(row.column_name, { data_type: row.data_type, udt_name: row.udt_name });
+      map.set(row.column_name, {
+        data_type: row.data_type,
+        udt_name: row.udt_name
+      });
     }
     return map;
   }
@@ -76,25 +87,32 @@ class SchemaCreationService {
   async alignAndExtendColumns(connection, table) {
     let changed = 0;
     const existingCols = await this.getExistingColumns(connection, table.name);
-    const existingDefs = await this.getColumnDefinitions(connection, table.name);
+    const existingDefs = await this.getColumnDefinitions(
+      connection,
+      table.name
+    );
 
     // Upgrade existing columns to JSONB when Metabase marks them as arrays/JSON
-    for (const field of (table.fields || [])) {
+    for (const field of table.fields || []) {
       const targetType = this.mapMetabaseTypeToPostgres(field.base_type);
-      if (!existingCols.has(String(field.name))) continue;
+      if (!existingCols.has(String(field.name))) {
+        continue;
+      }
       if (targetType === 'JSONB') {
         const info = existingDefs.get(String(field.name));
-        const isJson = info && (info.data_type && info.data_type.toLowerCase().includes('json'));
+        const isJson = info?.data_type?.toLowerCase().includes('json');
         if (!isJson) {
-          const colName = '"' + String(field.name).replace(/"/g, '""') + '"';
-          const tableName = '"' + String(table.name).replace(/"/g, '""') + '"';
+          const colName = `"${String(field.name).replace(/"/g, '""')}"`;
+          const tableName = `"${String(table.name).replace(/"/g, '""')}"`;
           const sql = `ALTER TABLE ${tableName} ALTER COLUMN ${colName} TYPE JSONB USING to_jsonb(${colName});`;
           try {
             await connection.query(sql);
             changed++;
             logger.info(`Altered ${table.name}.${field.name} to JSONB`);
           } catch (e) {
-            logger.warn(`Could not alter ${table.name}.${field.name} to JSONB: ${e.message}`);
+            logger.warn(
+              `Could not alter ${table.name}.${field.name} to JSONB: ${e.message}`
+            );
           }
         }
       }
@@ -117,7 +135,9 @@ class SchemaCreationService {
       const rows = result && Array.isArray(result.rows) ? result.rows : [];
       return Boolean(rows[0]?.exists);
     } catch (err) {
-      logger.warn(`Could not check existence for table ${tableName}: ${err.message}`);
+      logger.warn(
+        `Could not check existence for table ${tableName}: ${err.message}`
+      );
       return false;
     }
   }
@@ -129,7 +149,7 @@ class SchemaCreationService {
         [tableName]
       );
       const rows = result && Array.isArray(result.rows) ? result.rows : [];
-      return new Set(rows.map(r => r.column_name));
+      return new Set(rows.map((r) => r.column_name));
     } catch (err) {
       logger.warn(`Could not fetch columns for ${tableName}: ${err.message}`);
       return new Set();
@@ -139,8 +159,8 @@ class SchemaCreationService {
   async createTable(connection, table) {
     try {
       const columnsSql = (table.fields || [])
-        .map(field => {
-          const colName = '"' + String(field.name).replace(/"/g, '""') + '"';
+        .map((field) => {
+          const colName = `"${String(field.name).replace(/"/g, '""')}"`;
           const type = this.mapMetabaseTypeToPostgres(field.base_type);
           const def = `${colName} ${type}`;
           return field.semantic_type === 'type/PK' ? `${def} PRIMARY KEY` : def;
@@ -148,11 +168,13 @@ class SchemaCreationService {
         .join(', ');
 
       if (!columnsSql) {
-        logger.warn(`No columns found for table ${table.name}; skipping creation`);
+        logger.warn(
+          `No columns found for table ${table.name}; skipping creation`
+        );
         return false;
       }
 
-      const tableName = '"' + String(table.name).replace(/"/g, '""') + '"';
+      const tableName = `"${String(table.name).replace(/"/g, '""')}"`;
       const sql = `CREATE TABLE IF NOT EXISTS ${tableName} (${columnsSql});`;
       await connection.query(sql);
       logger.info(`Created table ${table.name}`);
@@ -166,12 +188,14 @@ class SchemaCreationService {
   async addMissingColumns(connection, table) {
     try {
       const existing = await this.getExistingColumns(connection, table.name);
-      const missingFields = (table.fields || []).filter(f => !existing.has(String(f.name)));
+      const missingFields = (table.fields || []).filter(
+        (f) => !existing.has(String(f.name))
+      );
       let added = 0;
       for (const field of missingFields) {
-        const colName = '"' + String(field.name).replace(/"/g, '""') + '"';
+        const colName = `"${String(field.name).replace(/"/g, '""')}"`;
         const type = this.mapMetabaseTypeToPostgres(field.base_type);
-        const tableName = '"' + String(table.name).replace(/"/g, '""') + '"';
+        const tableName = `"${String(table.name).replace(/"/g, '""')}"`;
         const sql = `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS ${colName} ${type};`;
         await connection.query(sql);
         added++;

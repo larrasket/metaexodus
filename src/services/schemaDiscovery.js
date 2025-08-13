@@ -25,20 +25,20 @@ class SchemaDiscoveryService {
         WHERE n.nspname = 'public'
         ORDER BY t.typname, e.enumsortorder;
       `;
-      
+
       const result = await connection.query(query);
       const enumMap = {};
-      
-      result.rows.forEach(row => {
+
+      result.rows.forEach((row) => {
         if (!enumMap[row.enum_name]) {
           enumMap[row.enum_name] = [];
         }
         enumMap[row.enum_name].push(row.enum_value);
       });
-      
+
       // Cache the results
       this.schemaCache.set('enums', enumMap);
-      
+
       return enumMap;
     } catch (error) {
       logger.warn(`Could not discover enum values: ${error.message}`);
@@ -54,7 +54,7 @@ class SchemaDiscoveryService {
    */
   async discoverTableSchema(connection, tableName) {
     const cacheKey = `table_${tableName}`;
-    
+
     if (this.schemaCache.has(cacheKey)) {
       return this.schemaCache.get(cacheKey);
     }
@@ -73,15 +73,17 @@ class SchemaDiscoveryService {
         AND c.table_schema = 'public'
         ORDER BY c.ordinal_position;
       `;
-      
+
       const result = await connection.query(query, [tableName]);
-      
+
       // Cache the results
       this.schemaCache.set(cacheKey, result.rows);
-      
+
       return result.rows;
     } catch (error) {
-      logger.warn(`Could not discover schema for table ${tableName}: ${error.message}`);
+      logger.warn(
+        `Could not discover schema for table ${tableName}: ${error.message}`
+      );
       return [];
     }
   }
@@ -94,7 +96,7 @@ class SchemaDiscoveryService {
    */
   async discoverForeignKeys(connection, tableName) {
     const cacheKey = `fk_${tableName}`;
-    
+
     if (this.schemaCache.has(cacheKey)) {
       return this.schemaCache.get(cacheKey);
     }
@@ -117,15 +119,17 @@ class SchemaDiscoveryService {
         AND tc.table_name = $1
         AND tc.table_schema = 'public';
       `;
-      
+
       const result = await connection.query(query, [tableName]);
-      
+
       // Cache the results
       this.schemaCache.set(cacheKey, result.rows);
-      
+
       return result.rows;
     } catch (error) {
-      logger.warn(`Could not discover foreign keys for table ${tableName}: ${error.message}`);
+      logger.warn(
+        `Could not discover foreign keys for table ${tableName}: ${error.message}`
+      );
       return [];
     }
   }
@@ -150,11 +154,11 @@ class SchemaDiscoveryService {
       `;
 
       const result = await connection.query(query);
-      const tableNames = result.rows.map(row => row.table_name);
-      
+      const tableNames = result.rows.map((row) => row.table_name);
+
       // Cache the results
       this.schemaCache.set('tables', tableNames);
-      
+
       return tableNames;
     } catch (error) {
       logger.warn(`Could not discover tables: ${error.message}`);
@@ -178,7 +182,9 @@ class SchemaDiscoveryService {
       tableName,
       columns,
       foreignKeys,
-      enumColumns: columns.filter(col => col.udt_name && this.schemaCache.get('enums')?.[col.udt_name])
+      enumColumns: columns.filter(
+        (col) => col.udt_name && this.schemaCache.get('enums')?.[col.udt_name]
+      )
     };
   }
 

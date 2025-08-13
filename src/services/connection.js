@@ -1,4 +1,4 @@
-import { Pool, Client } from 'pg';
+import { Client, Pool } from 'pg';
 import { configManager } from '../config/database.js';
 import { logger } from '../utils/logger.js';
 
@@ -47,7 +47,9 @@ class ConnectionService {
 
   async connectLocal() {
     if (!this.isInitialized) {
-      throw new Error('Connection service not initialized. Call initialize() first.');
+      throw new Error(
+        'Connection service not initialized. Call initialize() first.'
+      );
     }
 
     return this.connectWithRetry('local', async () => {
@@ -60,9 +62,14 @@ class ConnectionService {
         return this.localClient;
       } catch (error) {
         // If the database does not exist, attempt to create it then reconnect
-        const databaseDoesNotExist = error && (error.code === '3D000' || /database .* does not exist/i.test(error.message));
+        const databaseDoesNotExist =
+          error &&
+          (error.code === '3D000' ||
+            /database .* does not exist/i.test(error.message));
         if (databaseDoesNotExist) {
-          logger.warn(`Local database "${localConfig.database}" not found. Attempting to create it...`);
+          logger.warn(
+            `Local database "${localConfig.database}" not found. Attempting to create it...`
+          );
           await this.createDatabaseIfNotExists();
           // Retry connect after creating database
           this.localClient = new Client(connectionOptions);
@@ -87,15 +94,19 @@ class ConnectionService {
 
       if (newAttempts >= this.retryConfig.maxRetries) {
         this.connectionAttempts.set(connectionType, 0);
-        throw new Error(`Failed to connect to ${connectionType} database after ${this.retryConfig.maxRetries} attempts: ${error.message}`);
+        throw new Error(
+          `Failed to connect to ${connectionType} database after ${this.retryConfig.maxRetries} attempts: ${error.message}`
+        );
       }
 
       const delay = Math.min(
-        this.retryConfig.baseDelay * Math.pow(this.retryConfig.backoffFactor, attempts),
+        this.retryConfig.baseDelay * this.retryConfig.backoffFactor ** attempts,
         this.retryConfig.maxDelay
       );
 
-      logger.warn(`Connection attempt ${newAttempts} failed for ${connectionType} database. Retrying in ${delay}ms`);
+      logger.warn(
+        `Connection attempt ${newAttempts} failed for ${connectionType} database. Retrying in ${delay}ms`
+      );
 
       await this.sleep(delay);
 
@@ -104,12 +115,14 @@ class ConnectionService {
   }
 
   sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   async createLocalPool() {
     if (!this.isInitialized) {
-      throw new Error('Connection service not initialized. Call initialize() first.');
+      throw new Error(
+        'Connection service not initialized. Call initialize() first.'
+      );
     }
 
     try {
@@ -140,8 +153,8 @@ class ConnectionService {
       const dbName = localConfig.database;
       const owner = localConfig.username;
       // Ensure identifier quoting to handle special names
-      const quotedDbName = '"' + dbName.replace(/"/g, '""') + '"';
-      const quotedOwner = '"' + owner.replace(/"/g, '""') + '"';
+      const quotedDbName = `"${dbName.replace(/"/g, '""')}"`;
+      const quotedOwner = `"${owner.replace(/"/g, '""')}"`;
 
       // Check existence
       const existsResult = await adminClient.query(
@@ -156,11 +169,15 @@ class ConnectionService {
       // Create database with UTF8 encoding
       const createSql = `CREATE DATABASE ${quotedDbName} OWNER ${quotedOwner} TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C'`;
       await adminClient.query(createSql);
-      logger.success ? logger.success(`Created database ${dbName}`) : logger.info(`Created database ${dbName}`);
+      logger.success
+        ? logger.success(`Created database ${dbName}`)
+        : logger.info(`Created database ${dbName}`);
     } catch (err) {
       throw new Error(`Failed to create database: ${err.message}`);
     } finally {
-      try { await adminClient.end(); } catch {}
+      try {
+        await adminClient.end();
+      } catch {}
     }
   }
 
@@ -187,7 +204,11 @@ class ConnectionService {
     try {
       const startTime = Date.now();
 
-      if (connection.connect && typeof connection.connect === 'function' && !connection.query) {
+      if (
+        connection.connect &&
+        typeof connection.connect === 'function' &&
+        !connection.query
+      ) {
         const client = await connection.connect();
         await client.query('SELECT 1 as health_check');
         client.release();
@@ -220,16 +241,20 @@ class ConnectionService {
 
     return {
       initialized: this.isInitialized,
-      localPool: this.localPool ? {
-        totalCount: this.localPool.totalCount,
-        idleCount: this.localPool.idleCount,
-        waitingCount: this.localPool.waitingCount
-      } : null,
-      remotePool: this.remotePool ? {
-        totalCount: this.remotePool.totalCount,
-        idleCount: this.remotePool.idleCount,
-        waitingCount: this.remotePool.waitingCount
-      } : null,
+      localPool: this.localPool
+        ? {
+            totalCount: this.localPool.totalCount,
+            idleCount: this.localPool.idleCount,
+            waitingCount: this.localPool.waitingCount
+          }
+        : null,
+      remotePool: this.remotePool
+        ? {
+            totalCount: this.remotePool.totalCount,
+            idleCount: this.remotePool.idleCount,
+            waitingCount: this.remotePool.waitingCount
+          }
+        : null,
       retryAttempts: Object.fromEntries(this.connectionAttempts),
       configurations: maskedConfigs
     };
@@ -259,11 +284,13 @@ class ConnectionService {
         const health = await this.checkConnectionHealth(this.localPool);
         results.local = {
           ...health,
-          poolStats: health.healthy ? {
-            totalCount: this.localPool.totalCount,
-            idleCount: this.localPool.idleCount,
-            waitingCount: this.localPool.waitingCount
-          } : null
+          poolStats: health.healthy
+            ? {
+                totalCount: this.localPool.totalCount,
+                idleCount: this.localPool.idleCount,
+                waitingCount: this.localPool.waitingCount
+              }
+            : null
         };
       } catch (error) {
         results.local = {
@@ -279,11 +306,13 @@ class ConnectionService {
         const health = await this.checkConnectionHealth(this.remotePool);
         results.remote = {
           ...health,
-          poolStats: health.healthy ? {
-            totalCount: this.remotePool.totalCount,
-            idleCount: this.remotePool.idleCount,
-            waitingCount: this.remotePool.waitingCount
-          } : null
+          poolStats: health.healthy
+            ? {
+                totalCount: this.remotePool.totalCount,
+                idleCount: this.remotePool.idleCount,
+                waitingCount: this.remotePool.waitingCount
+              }
+            : null
         };
       } catch (error) {
         results.remote = {

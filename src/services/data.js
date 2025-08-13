@@ -1,5 +1,5 @@
-import { connectionService } from './connection.js';
 import { logger } from '../utils/logger.js';
+import { connectionService } from './connection.js';
 
 class DataService {
   constructor() {
@@ -45,7 +45,7 @@ class DataService {
       `;
 
       const result = await connection.query(query);
-      return result.rows.map(row => row.table_name);
+      return result.rows.map((row) => row.table_name);
     } catch (error) {
       throw new Error(`Failed to get table names: ${error.message}`);
     }
@@ -69,7 +69,7 @@ class DataService {
       const result = await connection.query(query);
       const dependencies = {};
 
-      result.rows.forEach(row => {
+      result.rows.forEach((row) => {
         if (!dependencies[row.dependent_table]) {
           dependencies[row.dependent_table] = [];
         }
@@ -99,7 +99,7 @@ class DataService {
       visiting.add(tableName);
 
       const deps = dependencies[tableName] || [];
-      deps.forEach(dep => {
+      deps.forEach((dep) => {
         if (tableNames.includes(dep)) {
           visit(dep);
         }
@@ -110,7 +110,7 @@ class DataService {
       sorted.push(tableName);
     };
 
-    tableNames.forEach(tableName => {
+    tableNames.forEach((tableName) => {
       if (!visited.has(tableName)) {
         visit(tableName);
       }
@@ -125,7 +125,9 @@ class DataService {
       const result = await connection.query(query);
       return parseInt(result.rows[0].count);
     } catch (error) {
-      throw new Error(`Failed to get row count for table ${tableName}: ${error.message}`);
+      throw new Error(
+        `Failed to get row count for table ${tableName}: ${error.message}`
+      );
     }
   }
 
@@ -154,7 +156,7 @@ class DataService {
       const result = await connection.query(query, [limit, offset]);
 
       const extractedRows = result.rows.length;
-      const hasMore = (offset + extractedRows) < totalRows;
+      const hasMore = offset + extractedRows < totalRows;
       const nextOffset = hasMore ? offset + extractedRows : 0;
 
       return {
@@ -164,10 +166,12 @@ class DataService {
         extractedRows,
         hasMore,
         nextOffset,
-        columns: result.fields ? result.fields.map(field => field.name) : []
+        columns: result.fields ? result.fields.map((field) => field.name) : []
       };
     } catch (error) {
-      throw new Error(`Failed to extract data from table ${tableName}: ${error.message}`);
+      throw new Error(
+        `Failed to extract data from table ${tableName}: ${error.message}`
+      );
     }
   }
 
@@ -215,11 +219,18 @@ class DataService {
         batchCount: Math.ceil(totalExtracted / this.batchSize)
       };
     } catch (error) {
-      throw new Error(`Failed to extract all data from table ${tableName}: ${error.message}`);
+      throw new Error(
+        `Failed to extract all data from table ${tableName}: ${error.message}`
+      );
     }
   }
 
-  async extractAllData(connection, onTableStart = null, onTableComplete = null, onBatch = null) {
+  async extractAllData(
+    connection,
+    onTableStart = null,
+    onTableComplete = null,
+    onBatch = null
+  ) {
     if (!this.isInitialized) {
       throw new Error('Data service not initialized. Call initialize() first.');
     }
@@ -238,7 +249,10 @@ class DataService {
       }
 
       const dependencies = await this.getTableDependencies(connection);
-      const sortedTables = this.sortTablesByDependencies(tableNames, dependencies);
+      const sortedTables = this.sortTablesByDependencies(
+        tableNames,
+        dependencies
+      );
 
       const results = [];
       let totalRows = 0;
@@ -247,10 +261,18 @@ class DataService {
       for (const tableName of sortedTables) {
         try {
           if (onTableStart && typeof onTableStart === 'function') {
-            await onTableStart({ tableName, tableIndex: results.length, totalTables: sortedTables.length });
+            await onTableStart({
+              tableName,
+              tableIndex: results.length,
+              totalTables: sortedTables.length
+            });
           }
 
-          const tableResult = await this.extractAllTableData(connection, tableName, onBatch);
+          const tableResult = await this.extractAllTableData(
+            connection,
+            tableName,
+            onBatch
+          );
 
           results.push(tableResult);
           totalRows += tableResult.totalRows;
@@ -264,7 +286,6 @@ class DataService {
               totalRows: tableResult.totalRows
             });
           }
-
         } catch (error) {
           const errorInfo = {
             tableName,
@@ -338,7 +359,9 @@ class DataService {
       const result = await connection.query(query, [tableName]);
       return result.rows;
     } catch (error) {
-      throw new Error(`Failed to get columns for table ${tableName}: ${error.message}`);
+      throw new Error(
+        `Failed to get columns for table ${tableName}: ${error.message}`
+      );
     }
   }
 
@@ -373,7 +396,7 @@ class DataService {
       }
 
       const columns = await this.getTableColumns(connection, tableName);
-      const columnNames = columns.map(col => col.column_name);
+      const columnNames = columns.map((col) => col.column_name);
 
       for (let i = 0; i < data.length; i += batchSize) {
         const batch = data.slice(i, i + batchSize);
@@ -396,7 +419,10 @@ class DataService {
             timestamp: new Date().toISOString()
           });
 
-          if (error.message.includes('does not exist') || error.message.includes('permission')) {
+          if (
+            error.message.includes('does not exist') ||
+            error.message.includes('permission')
+          ) {
             throw error;
           }
         }
@@ -411,7 +437,9 @@ class DataService {
         errors
       };
     } catch (error) {
-      throw new Error(`Failed to insert data into table ${tableName}: ${error.message}`);
+      throw new Error(
+        `Failed to insert data into table ${tableName}: ${error.message}`
+      );
     }
   }
 
@@ -421,20 +449,22 @@ class DataService {
     }
 
     const dataKeys = Object.keys(batch[0]);
-    const validColumns = columnNames.filter(col => dataKeys.includes(col));
+    const validColumns = columnNames.filter((col) => dataKeys.includes(col));
 
     if (validColumns.length === 0) {
       throw new Error(`No valid columns found for table ${tableName}`);
     }
 
-    const placeholders = batch.map((_, rowIndex) => {
-      const rowPlaceholders = validColumns.map((_, colIndex) =>
-        `$${rowIndex * validColumns.length + colIndex + 1}`
-      );
-      return `(${rowPlaceholders.join(', ')})`;
-    }).join(', ');
+    const placeholders = batch
+      .map((_, rowIndex) => {
+        const rowPlaceholders = validColumns.map(
+          (_, colIndex) => `$${rowIndex * validColumns.length + colIndex + 1}`
+        );
+        return `(${rowPlaceholders.join(', ')})`;
+      })
+      .join(', ');
 
-    const columnsList = validColumns.map(col => `"${col}"`).join(', ');
+    const columnsList = validColumns.map((col) => `"${col}"`).join(', ');
 
     let query = `INSERT INTO "${tableName}" (${columnsList}) VALUES ${placeholders}`;
 
@@ -442,14 +472,14 @@ class DataService {
       query += ' ON CONFLICT DO NOTHING';
     } else if (onConflict === 'update') {
       const updateSet = validColumns
-        .map(col => `"${col}" = EXCLUDED."${col}"`)
+        .map((col) => `"${col}" = EXCLUDED."${col}"`)
         .join(', ');
       query += ` ON CONFLICT DO UPDATE SET ${updateSet}`;
     }
 
     const values = [];
-    batch.forEach(row => {
-      validColumns.forEach(col => {
+    batch.forEach((row) => {
+      validColumns.forEach((col) => {
         let value = row[col];
         if (value === undefined) {
           value = null;
@@ -464,7 +494,10 @@ class DataService {
         // If a string looks like JSON array/object, pass as-is for JSONB
         if (typeof value === 'string') {
           const t = value.trim();
-          if ((t.startsWith('[') && t.endsWith(']')) || (t.startsWith('{') && t.endsWith('}'))) {
+          if (
+            (t.startsWith('[') && t.endsWith(']')) ||
+            (t.startsWith('{') && t.endsWith('}'))
+          ) {
             value = t;
           }
         }
@@ -481,7 +514,7 @@ class DataService {
       // Provide more detailed error information
       const errorMessage = error.message;
       const errorCode = error.code;
-      
+
       // Log the problematic data for debugging
       logger.debug(`Batch insertion failed for table ${tableName}:`, {
         error: errorMessage,
@@ -490,12 +523,17 @@ class DataService {
         columns: validColumns,
         sampleRow: batch[0]
       });
-      
+
       throw new Error(`Batch insertion failed: ${errorMessage}`);
     }
   }
 
-  async syncTableData(sourceConnection, targetConnection, tableName, options = {}) {
+  async syncTableData(
+    sourceConnection,
+    targetConnection,
+    tableName,
+    options = {}
+  ) {
     if (!this.isInitialized) {
       throw new Error('Data service not initialized. Call initialize() first.');
     }
@@ -574,7 +612,10 @@ class DataService {
       }
 
       const dependencies = await this.getTableDependencies(sourceConnection);
-      const sortedTables = this.sortTablesByDependencies(tableNames, dependencies);
+      const sortedTables = this.sortTablesByDependencies(
+        tableNames,
+        dependencies
+      );
 
       const results = [];
       let totalSourceRows = 0;
@@ -616,7 +657,6 @@ class DataService {
               success: syncResult.success
             });
           }
-
         } catch (error) {
           const errorInfo = {
             tableName,

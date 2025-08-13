@@ -52,7 +52,9 @@ jest.unstable_mockModule('../../src/services/dataTransformation.js', () => ({
   dataTransformationService: mockDataTransformationService
 }));
 
-const { SyncOrchestratorService, syncOrchestratorService } = await import('../../src/services/syncOrchestrator.js');
+const { SyncOrchestratorService, syncOrchestratorService } = await import(
+  '../../src/services/syncOrchestrator.js'
+);
 
 describe('SyncOrchestratorService', () => {
   let service;
@@ -76,14 +78,22 @@ describe('SyncOrchestratorService', () => {
       ]
     });
     mockDataService.getTableDependencies.mockResolvedValue({});
-    mockDataService.sortTablesByDependencies.mockReturnValue(['users', 'orders']);
+    mockDataService.sortTablesByDependencies.mockReturnValue([
+      'users',
+      'orders'
+    ]);
     mockSchemaDiscoveryService.discoverEnumValues.mockResolvedValue({});
-    mockMetabaseService.getTableRowCount.mockResolvedValue({ success: true, count: 10 });
+    mockMetabaseService.getTableRowCount.mockResolvedValue({
+      success: true,
+      count: 10
+    });
     mockMetabaseService.extractAllTableData.mockResolvedValue({
       success: true,
       data: [{ id: 1, name: 'test' }]
     });
-    mockDataTransformationService.transformTableData.mockResolvedValue([{ id: 1, name: 'test' }]);
+    mockDataTransformationService.transformTableData.mockResolvedValue([
+      { id: 1, name: 'test' }
+    ]);
     mockDataService.insertTableData.mockResolvedValue({
       success: true,
       insertedRows: 1
@@ -100,7 +110,10 @@ describe('SyncOrchestratorService', () => {
       expect(result.success).toBe(true);
       expect(result.totalTables).toBe(2);
       expect(result.successfulTables).toBe(2);
-      expect(mockMetabaseService.authenticate).toHaveBeenCalledWith('test', 'test');
+      expect(mockMetabaseService.authenticate).toHaveBeenCalledWith(
+        'test',
+        'test'
+      );
       expect(mockConnectionService.initialize).toHaveBeenCalled();
       expect(mockDataService.initialize).toHaveBeenCalled();
     });
@@ -139,8 +152,13 @@ describe('SyncOrchestratorService', () => {
 
       await service.syncSingleTable(mockConnection, table, enumMap);
 
-      expect(mockMetabaseService.extractAllTableData).toHaveBeenCalledWith(1, 'users');
-      expect(mockDataTransformationService.transformTableData).toHaveBeenCalled();
+      expect(mockMetabaseService.extractAllTableData).toHaveBeenCalledWith(
+        1,
+        'users'
+      );
+      expect(
+        mockDataTransformationService.transformTableData
+      ).toHaveBeenCalled();
       expect(mockDataService.insertTableData).toHaveBeenCalled();
     });
 
@@ -152,9 +170,9 @@ describe('SyncOrchestratorService', () => {
 
       const table = { id: 1, name: 'users' };
 
-      await expect(service.syncSingleTable(mockConnection, table, {})).rejects.toThrow(
-        'Data extraction failed: Extraction failed'
-      );
+      await expect(
+        service.syncSingleTable(mockConnection, table, {})
+      ).rejects.toThrow('Data extraction failed: Extraction failed');
     });
 
     test('should handle data insertion failure', async () => {
@@ -165,9 +183,9 @@ describe('SyncOrchestratorService', () => {
 
       const table = { id: 1, name: 'users' };
 
-      await expect(service.syncSingleTable(mockConnection, table, {})).rejects.toThrow(
-        'Data insertion failed: Constraint violation'
-      );
+      await expect(
+        service.syncSingleTable(mockConnection, table, {})
+      ).rejects.toThrow('Data insertion failed: Constraint violation');
     });
 
     test('should handle row count mismatch', async () => {
@@ -183,9 +201,9 @@ describe('SyncOrchestratorService', () => {
 
       const table = { id: 1, name: 'users' };
 
-      await expect(service.syncSingleTable(mockConnection, table, {})).rejects.toThrow(
-        'Row count mismatch: expected 2, inserted 1'
-      );
+      await expect(
+        service.syncSingleTable(mockConnection, table, {})
+      ).rejects.toThrow('Row count mismatch: expected 2, inserted 1');
     });
   });
 
@@ -198,9 +216,9 @@ describe('SyncOrchestratorService', () => {
       const tables = [{ name: 'users' }];
       const dependencies = {};
 
-      await expect(service.handleSyncFailures(tables, dependencies)).rejects.toThrow(
-        'Database synchronization FAILED - no changes applied'
-      );
+      await expect(
+        service.handleSyncFailures(tables, dependencies)
+      ).rejects.toThrow('Database synchronization FAILED - no changes applied');
 
       expect(mockConnection.query).toHaveBeenCalledWith('DELETE FROM "users"');
     });
@@ -236,7 +254,9 @@ describe('SyncOrchestratorService', () => {
     });
 
     test('should handle cleanup errors gracefully', async () => {
-      mockConnectionService.closeConnections.mockRejectedValue(new Error('Cleanup error'));
+      mockConnectionService.closeConnections.mockRejectedValue(
+        new Error('Cleanup error')
+      );
 
       await expect(service.cleanup()).resolves.not.toThrow();
     });

@@ -1,5 +1,8 @@
 import { jest } from '@jest/globals';
-import { SchemaDiscoveryService, schemaDiscoveryService } from '../../src/services/schemaDiscovery.js';
+import {
+  SchemaDiscoveryService,
+  schemaDiscoveryService
+} from '../../src/services/schemaDiscovery.js';
 
 describe('SchemaDiscoveryService', () => {
   let service;
@@ -30,7 +33,9 @@ describe('SchemaDiscoveryService', () => {
         status_enum: ['ACTIVE', 'INACTIVE'],
         type_enum: ['USER', 'ADMIN']
       });
-      expect(mockConnection.query).toHaveBeenCalledWith(expect.stringContaining('pg_enum'));
+      expect(mockConnection.query).toHaveBeenCalledWith(
+        expect.stringContaining('pg_enum')
+      );
     });
 
     test('should handle empty enum result', async () => {
@@ -107,7 +112,10 @@ describe('SchemaDiscoveryService', () => {
         ]
       });
 
-      const result = await service.discoverForeignKeys(mockConnection, 'orders');
+      const result = await service.discoverForeignKeys(
+        mockConnection,
+        'orders'
+      );
 
       expect(result).toHaveLength(1);
       expect(result[0].constraint_name).toBe('fk_user_id');
@@ -184,7 +192,7 @@ describe('SchemaDiscoveryService', () => {
     test('should clear entire cache', () => {
       service.schemaCache.set('key1', 'value1');
       service.schemaCache.set('key2', 'value2');
-      
+
       service.clearCache();
 
       expect(service.schemaCache.size).toBe(0);

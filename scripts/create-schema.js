@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
-import dotenv from "dotenv";
+import dotenv from 'dotenv';
+
 dotenv.config();
 
-import { Pool } from "pg";
-import axios from "axios";
+import axios from 'axios';
+import { Pool } from 'pg';
 
 class SchemaCreator {
   constructor() {
@@ -20,24 +21,24 @@ class SchemaCreator {
       database: process.env.DB_LOCAL_NAME,
       user: process.env.DB_LOCAL_USERNAME,
       password: process.env.DB_LOCAL_PASSWORD,
-      ssl: process.env.DB_LOCAL_SSL === "true",
+      ssl: process.env.DB_LOCAL_SSL === 'true'
     });
   }
 
   async authenticate() {
     try {
-      console.log("🔐 Authenticating with Metabase...");
+      console.log('🔐 Authenticating with Metabase...');
       const response = await axios.post(`${this.baseURL}/api/session`, {
         username: this.username,
-        password: this.password,
+        password: this.password
       });
 
       this.sessionToken = response.data.id;
-      console.log("✅ Authentication successful");
+      console.log('✅ Authentication successful');
       return true;
     } catch (error) {
       console.error(
-        "❌ Authentication failed:",
+        '❌ Authentication failed:',
         error.response?.data || error.message
       );
       return false;
@@ -46,20 +47,20 @@ class SchemaCreator {
 
   async getTables() {
     try {
-      console.log("📋 Fetching table schema from Metabase...");
+      console.log('📋 Fetching table schema from Metabase...');
       const response = await axios.get(
         `${this.baseURL}/api/database/${this.databaseId}/metadata`,
         {
           headers: {
-            "X-Metabase-Session": this.sessionToken,
-          },
+            'X-Metabase-Session': this.sessionToken
+          }
         }
       );
 
       return response.data.tables || [];
     } catch (error) {
       console.error(
-        "❌ Failed to fetch tables:",
+        '❌ Failed to fetch tables:',
         error.response?.data || error.message
       );
       return [];
@@ -75,11 +76,11 @@ class SchemaCreator {
           const columnDef = `${quotedColumnName} ${this.mapMetabaseTypeToPostgres(
             field.base_type
           )}`;
-          return field.semantic_type === "type/PK"
+          return field.semantic_type === 'type/PK'
             ? `${columnDef} PRIMARY KEY`
             : columnDef;
         })
-        .join(", ");
+        .join(', ');
 
       if (!columns) {
         console.warn(`⚠️  No columns found for table ${table.name}`);
@@ -103,21 +104,21 @@ class SchemaCreator {
 
   mapMetabaseTypeToPostgres(metabaseType) {
     const typeMap = {
-      "type/Text": "TEXT",
-      "type/Integer": "INTEGER",
-      "type/Float": "DOUBLE PRECISION",
-      "type/Boolean": "BOOLEAN",
-      "type/Date": "DATE",
-      "type/DateTime": "TIMESTAMP",
-      "type/Time": "TIME",
-      "type/Decimal": "DECIMAL",
-      "type/BigInteger": "BIGINT",
-      "type/SerializedJSON": "JSONB",
-      "type/Array": "TEXT[]",
-      "type/UUID": "UUID",
+      'type/Text': 'TEXT',
+      'type/Integer': 'INTEGER',
+      'type/Float': 'DOUBLE PRECISION',
+      'type/Boolean': 'BOOLEAN',
+      'type/Date': 'DATE',
+      'type/DateTime': 'TIMESTAMP',
+      'type/Time': 'TIME',
+      'type/Decimal': 'DECIMAL',
+      'type/BigInteger': 'BIGINT',
+      'type/SerializedJSON': 'JSONB',
+      'type/Array': 'TEXT[]',
+      'type/UUID': 'UUID'
     };
 
-    return typeMap[metabaseType] || "TEXT";
+    return typeMap[metabaseType] || 'TEXT';
   }
 
   async createSchema() {
@@ -152,8 +153,8 @@ class SchemaCreator {
 }
 
 async function main() {
-  console.log("🏗️  MetaExodus Schema Creator");
-  console.log("================================\n");
+  console.log('🏗️  MetaExodus Schema Creator');
+  console.log('================================\n');
 
   const creator = new SchemaCreator();
 
@@ -161,14 +162,14 @@ async function main() {
     const success = await creator.createSchema();
 
     if (success) {
-      console.log("\n🎉 Schema creation completed!");
-      console.log("You can now run the full sync with: yarn start");
+      console.log('\n🎉 Schema creation completed!');
+      console.log('You can now run the full sync with: yarn start');
     } else {
-      console.log("\n❌ Schema creation failed");
+      console.log('\n❌ Schema creation failed');
       process.exit(1);
     }
   } catch (error) {
-    console.error("💥 Unexpected error:", error);
+    console.error('💥 Unexpected error:', error);
     process.exit(1);
   } finally {
     await creator.cleanup();

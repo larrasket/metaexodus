@@ -28,17 +28,26 @@ class DataTransformationService {
     }
 
     // Get table schema information
-    const schema = await schemaDiscoveryService.discoverTableSchema(connection, tableName);
-    const enumColumns = schema.filter(col => col.udt_name && enumMap[col.udt_name]);
-    
+    const schema = await schemaDiscoveryService.discoverTableSchema(
+      connection,
+      tableName
+    );
+    const enumColumns = schema.filter(
+      (col) => col.udt_name && enumMap[col.udt_name]
+    );
+
     if (enumColumns.length === 0) {
       return data; // No transformations needed
     }
 
     // Transform each row
-    const transformedData = data.map(row => this.transformRow(row, enumColumns, enumMap, tableName));
-    
-    logger.debug(`Transformed ${transformedData.length} rows for table ${tableName}`);
+    const transformedData = data.map((row) =>
+      this.transformRow(row, enumColumns, enumMap, tableName)
+    );
+
+    logger.debug(
+      `Transformed ${transformedData.length} rows for table ${tableName}`
+    );
     return transformedData;
   }
 
@@ -52,24 +61,32 @@ class DataTransformationService {
    */
   transformRow(row, enumColumns, enumMap, tableName) {
     const transformedRow = { ...row };
-    
-    enumColumns.forEach(col => {
+
+    enumColumns.forEach((col) => {
       const columnName = col.column_name;
       const enumName = col.udt_name;
       const validValues = enumMap[enumName] || [];
-      
-      if (transformedRow[columnName] !== null && transformedRow[columnName] !== undefined) {
+
+      if (
+        transformedRow[columnName] !== null &&
+        transformedRow[columnName] !== undefined
+      ) {
         const currentValue = transformedRow[columnName];
-        
+
         // Check if current value is valid
         if (!validValues.includes(currentValue)) {
-          const transformedValue = this.transformEnumValue(currentValue, validValues, tableName, columnName);
+          const transformedValue = this.transformEnumValue(
+            currentValue,
+            validValues,
+            tableName,
+            columnName
+          );
           transformedRow[columnName] = transformedValue;
           this.transformationStats.enumTransformations++;
         }
       }
     });
-    
+
     this.transformationStats.totalTransformations++;
     return transformedRow;
   }
@@ -89,43 +106,54 @@ class DataTransformationService {
     }
 
     // Try case insensitive match
-    const caseInsensitiveMatch = validValues.find(valid => 
-      valid.toLowerCase() === currentValue.toLowerCase()
+    const caseInsensitiveMatch = validValues.find(
+      (valid) => valid.toLowerCase() === currentValue.toLowerCase()
     );
-    
+
     if (caseInsensitiveMatch) {
-      logger.debug(`Case-insensitive match: '${currentValue}' -> '${caseInsensitiveMatch}' for ${tableName}.${columnName}`);
+      logger.debug(
+        `Case-insensitive match: '${currentValue}' -> '${caseInsensitiveMatch}' for ${tableName}.${columnName}`
+      );
       return caseInsensitiveMatch;
     }
 
     // Try partial match (contains)
-    const partialMatch = validValues.find(valid => 
-      valid.toLowerCase().includes(currentValue.toLowerCase()) ||
-      currentValue.toLowerCase().includes(valid.toLowerCase())
+    const partialMatch = validValues.find(
+      (valid) =>
+        valid.toLowerCase().includes(currentValue.toLowerCase()) ||
+        currentValue.toLowerCase().includes(valid.toLowerCase())
     );
-    
+
     if (partialMatch) {
-      logger.debug(`Partial match: '${currentValue}' -> '${partialMatch}' for ${tableName}.${columnName}`);
+      logger.debug(
+        `Partial match: '${currentValue}' -> '${partialMatch}' for ${tableName}.${columnName}`
+      );
       return partialMatch;
     }
 
     // Try common enum value mappings
     const commonMappings = this.getCommonEnumMappings();
     const mappedValue = commonMappings[currentValue.toLowerCase()];
-    
+
     if (mappedValue && validValues.includes(mappedValue)) {
-      logger.debug(`Common mapping: '${currentValue}' -> '${mappedValue}' for ${tableName}.${columnName}`);
+      logger.debug(
+        `Common mapping: '${currentValue}' -> '${mappedValue}' for ${tableName}.${columnName}`
+      );
       return mappedValue;
     }
 
     // Default to first valid value if available
     if (validValues.length > 0) {
-      logger.debug(`Default mapping: '${currentValue}' -> '${validValues[0]}' for ${tableName}.${columnName}`);
+      logger.debug(
+        `Default mapping: '${currentValue}' -> '${validValues[0]}' for ${tableName}.${columnName}`
+      );
       return validValues[0];
     }
 
     // Set to null if no valid values
-    logger.warn(`No valid enum mapping found for '${currentValue}' in ${tableName}.${columnName}, setting to null`);
+    logger.warn(
+      `No valid enum mapping found for '${currentValue}' in ${tableName}.${columnName}, setting to null`
+    );
     this.transformationStats.nullTransformations++;
     return null;
   }
@@ -137,37 +165,37 @@ class DataTransformationService {
   getCommonEnumMappings() {
     return {
       // Common activity/target type mappings
-      'activity': 'INDIVIDUAL',
-      'user': 'INDIVIDUAL',
-      'individual': 'INDIVIDUAL',
-      'group': 'GROUP',
-      'all': 'ALL',
-      'everyone': 'ALL',
-      
+      activity: 'INDIVIDUAL',
+      user: 'INDIVIDUAL',
+      individual: 'INDIVIDUAL',
+      group: 'GROUP',
+      all: 'ALL',
+      everyone: 'ALL',
+
       // Common page type mappings
-      'event_details': 'EVENT',
-      'event': 'EVENT',
-      'news_details': 'NEWS',
-      'news': 'NEWS',
-      'profile': 'PROFILE',
-      'home': 'HOME',
-      'dashboard': 'HOME',
-      
+      event_details: 'EVENT',
+      event: 'EVENT',
+      news_details: 'NEWS',
+      news: 'NEWS',
+      profile: 'PROFILE',
+      home: 'HOME',
+      dashboard: 'HOME',
+
       // Common status mappings
-      'active': 'ACTIVE',
-      'inactive': 'INACTIVE',
-      'enabled': 'ACTIVE',
-      'disabled': 'INACTIVE',
-      'on': 'ACTIVE',
-      'off': 'INACTIVE',
-      
+      active: 'ACTIVE',
+      inactive: 'INACTIVE',
+      enabled: 'ACTIVE',
+      disabled: 'INACTIVE',
+      on: 'ACTIVE',
+      off: 'INACTIVE',
+
       // Common boolean-like mappings
-      'true': 'TRUE',
-      'false': 'FALSE',
-      'yes': 'TRUE',
-      'no': 'FALSE',
-      '1': 'TRUE',
-      '0': 'FALSE'
+      true: 'TRUE',
+      false: 'FALSE',
+      yes: 'TRUE',
+      no: 'FALSE',
+      1: 'TRUE',
+      0: 'FALSE'
     };
   }
 
@@ -186,40 +214,52 @@ class DataTransformationService {
       switch (targetType.toLowerCase()) {
         case 'integer':
         case 'bigint':
-        case 'smallint':
+        case 'smallint': {
           const intValue = parseInt(value);
-          return isNaN(intValue) ? null : intValue;
-          
+          return Number.isNaN(intValue) ? null : intValue;
+        }
+
         case 'numeric':
         case 'decimal':
         case 'real':
-        case 'double precision':
+        case 'double precision': {
           const numValue = parseFloat(value);
-          return isNaN(numValue) ? null : numValue;
-          
-        case 'boolean':
-          if (typeof value === 'boolean') return value;
+          return Number.isNaN(numValue) ? null : numValue;
+        }
+
+        case 'boolean': {
+          if (typeof value === 'boolean') {
+            return value;
+          }
           const strValue = String(value).toLowerCase();
           return ['true', '1', 'yes', 'on', 't', 'y'].includes(strValue);
-          
+        }
+
         case 'date':
         case 'timestamp':
-        case 'timestamptz':
-          if (value instanceof Date) return value;
+        case 'timestamptz': {
+          if (value instanceof Date) {
+            return value;
+          }
           const dateValue = new Date(value);
-          return isNaN(dateValue.getTime()) ? null : dateValue;
-          
+          return Number.isNaN(dateValue.getTime()) ? null : dateValue;
+        }
+
         case 'json':
         case 'jsonb':
-          if (typeof value === 'object') return JSON.stringify(value);
+          if (typeof value === 'object') {
+            return JSON.stringify(value);
+          }
           return value;
-          
+
         default:
           // For text, varchar, and other string types
           return String(value);
       }
     } catch (error) {
-      logger.warn(`Type conversion failed for value '${value}' to type '${targetType}': ${error.message}`);
+      logger.warn(
+        `Type conversion failed for value '${value}' to type '${targetType}': ${error.message}`
+      );
       this.transformationStats.typeConversions++;
       return null;
     }
@@ -233,11 +273,16 @@ class DataTransformationService {
    */
   validateTransformedData(data, schema) {
     const issues = [];
-    const requiredColumns = schema.filter(col => col.is_nullable === 'NO' && !col.column_default);
-    
+    const requiredColumns = schema.filter(
+      (col) => col.is_nullable === 'NO' && !col.column_default
+    );
+
     data.forEach((row, index) => {
-      requiredColumns.forEach(col => {
-        if (row[col.column_name] === null || row[col.column_name] === undefined) {
+      requiredColumns.forEach((col) => {
+        if (
+          row[col.column_name] === null ||
+          row[col.column_name] === undefined
+        ) {
           issues.push({
             type: 'null_constraint_violation',
             row: index,

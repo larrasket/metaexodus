@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 
-import dotenv from "dotenv";
+import dotenv from 'dotenv';
+
 dotenv.config();
 
-import { Pool } from "pg";
-import axios from "axios";
-import { logger } from "../src/utils/logger.js";
+import axios from 'axios';
+import { Pool } from 'pg';
 
 // Tables to exclude due to data complexity issues
-const EXCLUDED_TABLES = ["admin_logs", "user"];
+const EXCLUDED_TABLES = ['admin_logs', 'user'];
 
 class PartialSyncService {
   constructor() {
@@ -24,24 +24,24 @@ class PartialSyncService {
       database: process.env.DB_LOCAL_NAME,
       user: process.env.DB_LOCAL_USERNAME,
       password: process.env.DB_LOCAL_PASSWORD,
-      ssl: process.env.DB_LOCAL_SSL === "true",
+      ssl: process.env.DB_LOCAL_SSL === 'true'
     });
   }
 
   async authenticate() {
     try {
-      console.log("🔐 Authenticating with Metabase...");
+      console.log('🔐 Authenticating with Metabase...');
       const response = await axios.post(`${this.baseURL}/api/session`, {
         username: this.username,
-        password: this.password,
+        password: this.password
       });
 
       this.sessionToken = response.data.id;
-      console.log("✅ Authentication successful");
+      console.log('✅ Authentication successful');
       return true;
     } catch (error) {
       console.error(
-        "❌ Authentication failed:",
+        '❌ Authentication failed:',
         error.response?.data || error.message
       );
       return false;
@@ -50,13 +50,13 @@ class PartialSyncService {
 
   async getTables() {
     try {
-      console.log("📋 Fetching tables from Metabase...");
+      console.log('📋 Fetching tables from Metabase...');
       const response = await axios.get(
         `${this.baseURL}/api/database/${this.databaseId}/metadata`,
         {
           headers: {
-            "X-Metabase-Session": this.sessionToken,
-          },
+            'X-Metabase-Session': this.sessionToken
+          }
         }
       );
 
@@ -71,7 +71,7 @@ class PartialSyncService {
       return filteredTables;
     } catch (error) {
       console.error(
-        "❌ Failed to fetch tables:",
+        '❌ Failed to fetch tables:',
         error.response?.data || error.message
       );
       return [];
@@ -93,17 +93,17 @@ class PartialSyncService {
     try {
       const query = {
         database: this.databaseId,
-        type: "query",
+        type: 'query',
         query: {
-          "source-table": tableId,
-        },
+          'source-table': tableId
+        }
       };
 
       const response = await axios.post(`${this.baseURL}/api/dataset`, query, {
         headers: {
-          "X-Metabase-Session": this.sessionToken,
-          "Content-Type": "application/json",
-        },
+          'X-Metabase-Session': this.sessionToken,
+          'Content-Type': 'application/json'
+        }
       });
 
       const data = response.data;
@@ -142,10 +142,10 @@ class PartialSyncService {
       }
 
       // Create the INSERT statement
-      const columnNames = columns.map((col) => `"${col}"`).join(", ");
+      const columnNames = columns.map((col) => `"${col}"`).join(', ');
       const placeholders = columns
         .map((_, index) => `$${index + 1}`)
-        .join(", ");
+        .join(', ');
 
       const insertSQL = `INSERT INTO "${tableName}" (${columnNames}) VALUES (${placeholders})`;
 
@@ -193,14 +193,14 @@ class PartialSyncService {
   }
 
   async syncAll() {
-    console.log("🚀 MetaExodus - Partial Sync (Excluding Problematic Tables)");
+    console.log('🚀 MetaExodus - Partial Sync (Excluding Problematic Tables)');
     console.log(
-      "============================================================\n"
+      '============================================================\n'
     );
 
     console.log(`⚠️  Excluding ${EXCLUDED_TABLES.length} problematic tables:`);
     EXCLUDED_TABLES.forEach((table) => console.log(`   - ${table}`));
-    console.log("");
+    console.log('');
 
     if (!(await this.authenticate())) {
       return false;
@@ -208,11 +208,11 @@ class PartialSyncService {
 
     const tables = await this.getTables();
     if (tables.length === 0) {
-      console.log("❌ No tables to sync");
+      console.log('❌ No tables to sync');
       return false;
     }
 
-    console.log("\n🔄 Starting synchronization...\n");
+    console.log('\n🔄 Starting synchronization...\n');
 
     let successCount = 0;
     let failCount = 0;
@@ -225,7 +225,7 @@ class PartialSyncService {
       }
     }
 
-    console.log("\n📈 Sync Summary:");
+    console.log('\n📈 Sync Summary:');
     console.log(`✅ Successfully synced: ${successCount} tables`);
     console.log(`❌ Failed to sync: ${failCount} tables`);
     console.log(`⚠️  Excluded: ${EXCLUDED_TABLES.length} problematic tables`);
@@ -245,16 +245,16 @@ async function main() {
     const success = await syncService.syncAll();
 
     if (success) {
-      console.log("\n🎉 Partial synchronization completed successfully!");
+      console.log('\n🎉 Partial synchronization completed successfully!');
       console.log(
-        "💡 You can manually handle the excluded tables later if needed."
+        '💡 You can manually handle the excluded tables later if needed.'
       );
     } else {
-      console.log("\n❌ Synchronization failed");
+      console.log('\n❌ Synchronization failed');
       process.exit(1);
     }
   } catch (error) {
-    console.error("💥 Unexpected error:", error);
+    console.error('💥 Unexpected error:', error);
     process.exit(1);
   } finally {
     await syncService.cleanup();

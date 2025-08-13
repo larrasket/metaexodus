@@ -1,4 +1,4 @@
-import { validateEnvironment, createEnvTemplate } from "../utils/env.js";
+import { createEnvTemplate, validateEnvironment } from "../utils/env.js";
 
 class DatabaseConfig {
   constructor(host, port, database, username, password, ssl = false) {
@@ -41,7 +41,12 @@ class DatabaseConfig {
       errors.push("Host is required and must be a string");
     }
 
-    if (!this.port || isNaN(this.port) || this.port <= 0 || this.port > 65535) {
+    if (
+      !this.port ||
+      Number.isNaN(this.port) ||
+      this.port <= 0 ||
+      this.port > 65535
+    ) {
       errors.push("Port must be a valid number between 1 and 65535");
     }
 

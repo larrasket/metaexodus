@@ -7,10 +7,10 @@ const mockLogger = {
   startSpinner: jest.fn(() => ({ stop: jest.fn() })),
   updateSpinner: jest.fn(),
   stopSpinner: jest.fn(),
-  createProgressBar: jest.fn(() => ({ 
-    start: jest.fn(), 
-    update: jest.fn(), 
-    stop: jest.fn() 
+  createProgressBar: jest.fn(() => ({
+    start: jest.fn(),
+    update: jest.fn(),
+    stop: jest.fn()
   })),
   updateProgress: jest.fn(),
   stopProgress: jest.fn(),
