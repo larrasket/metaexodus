@@ -48,7 +48,9 @@ describe('Logger', () => {
 
     test('should log success messages to console', () => {
       logger.success('Test success message');
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Test success message'));
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Test success message')
+      );
     });
   });
 
@@ -90,16 +92,18 @@ describe('Logger', () => {
     test('should update spinner text', () => {
       logger.startSpinner('Initial text');
       logger.updateSpinner('Updated text');
-      
+
       const spinner = logger.spinners.get('default');
       expect(spinner.text).toContain('Updated text');
-      
+
       // Clean up the spinner to prevent hanging
       logger.stopSpinner(true);
     });
 
     test('should handle stopping non-existent spinner', () => {
-      expect(() => logger.stopSpinner(true, 'Success!', 'nonexistent')).not.toThrow();
+      expect(() =>
+        logger.stopSpinner(true, 'Success!', 'nonexistent')
+      ).not.toThrow();
     });
   });
 
@@ -127,7 +131,9 @@ describe('Logger', () => {
     });
 
     test('should handle updating non-existent progress bar', () => {
-      expect(() => logger.updateProgress(50, 'text', 'nonexistent')).not.toThrow();
+      expect(() =>
+        logger.updateProgress(50, 'text', 'nonexistent')
+      ).not.toThrow();
     });
   });
 
@@ -147,7 +153,7 @@ describe('Logger', () => {
         { name: 'John', age: 30 },
         { name: 'Jane', age: 25 }
       ];
-      
+
       logger.table(data);
       expect(consoleSpy).toHaveBeenCalled();
     });
@@ -163,7 +169,7 @@ describe('Logger', () => {
         syncedTables: 8,
         totalRows: 1000
       };
-      
+
       logger.summary(stats);
       expect(consoleSpy).toHaveBeenCalled();
     });

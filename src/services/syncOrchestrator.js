@@ -1,9 +1,10 @@
 import { logger } from '../utils/logger.js';
-import { metabaseService } from './metabase.js';
 import { connectionService } from './connection.js';
 import { dataService } from './data.js';
-import { schemaDiscoveryService } from './schemaDiscovery.js';
 import { dataTransformationService } from './dataTransformation.js';
+import { metabaseService } from './metabase.js';
+import { schemaCreationService } from './schemaCreation.js';
+import { schemaDiscoveryService } from './schemaDiscovery.js';
 
 /**
  * Orchestrates the complete database synchronization process
@@ -16,7 +17,7 @@ class SyncOrchestratorService {
       enableRollback: true,
       enableTransformation: true
     };
-    
+
     this.syncStats = {
       startTime: null,
       endTime: null,
@@ -47,7 +48,6 @@ class SyncOrchestratorService {
       await this.synchronizeData(tables, dependencies, enumMap);
 
       return await this.finalizeSynchronization();
-
     } catch (error) {
       logger.error('Synchronization failure', error);
       await this.handleSyncFailure();
@@ -70,7 +70,9 @@ class SyncOrchestratorService {
 
     if (!authResult.success) {
       logger.stopSpinner(false, 'Authentication failed');
-      throw new Error(`Failed to authenticate with Metabase: ${authResult.error}`);
+      throw new Error(
+        `Failed to authenticate with Metabase: ${authResult.error}`
+      );
     }
     logger.stopSpinner(true, 'Metabase authentication successful');
 
@@ -98,14 +100,24 @@ class SyncOrchestratorService {
     this.syncStats.totalTables = tables.length;
     logger.stopSpinner(true, `Found ${tables.length} tables to synchronize`);
 
-    logger.startSpinner('Analyzing table dependencies');
+    // Ensure schema exists/updated locally before any data operations
+    logger.startSpinner('Ensuring local schema (creating database objects)');
     const localConnection = await connectionService.connectLocal();
-    const dependencies = await dataService.getTableDependencies(localConnection);
+    await schemaCreationService.ensureSchema(localConnection, tables);
+    logger.stopSpinner(true, 'Local schema ensured');
+
+    logger.startSpinner('Analyzing table dependencies');
+    const dependencies =
+      await dataService.getTableDependencies(localConnection);
     logger.stopSpinner(true, 'Table dependencies analyzed');
 
     logger.startSpinner('Discovering database schema');
-    const enumMap = await schemaDiscoveryService.discoverEnumValues(localConnection);
-    logger.stopSpinner(true, `Discovered ${Object.keys(enumMap).length} enum types`);
+    const enumMap =
+      await schemaDiscoveryService.discoverEnumValues(localConnection);
+    logger.stopSpinner(
+      true,
+      `Discovered ${Object.keys(enumMap).length} enum types`
+    );
 
     return { tables, dependencies, enumMap };
   }
@@ -118,8 +130,10 @@ class SyncOrchestratorService {
   async clearExistingData(tables, dependencies) {
     logger.startSpinner('Clearing existing data from tables');
     const localConnection = await connectionService.connectLocal();
-    const tableNames = tables.map(t => t.name);
-    const clearingOrder = dataService.sortTablesByDependencies(tableNames, dependencies).reverse();
+    const tableNames = tables.map((t) => t.name);
+    const clearingOrder = dataService
+      .sortTablesByDependencies(tableNames, dependencies)
+      .reverse();
 
     let clearedTables = 0;
     for (const tableName of clearingOrder) {
@@ -127,11 +141,16 @@ class SyncOrchestratorService {
         await localConnection.query(`DELETE FROM "${tableName}"`);
         clearedTables++;
       } catch (deleteError) {
-        logger.warn(`Could not clear table ${tableName}: ${deleteError.message}`);
+        logger.warn(
+          `Could not clear table ${tableName}: ${deleteError.message}`
+        );
       }
     }
-    
-    logger.stopSpinner(true, `Cleared data from ${clearedTables}/${tables.length} tables`);
+
+    logger.stopSpinner(
+      true,
+      `Cleared data from ${clearedTables}/${tables.length} tables`
+    );
   }
 
   /**
@@ -143,7 +162,7 @@ class SyncOrchestratorService {
   async synchronizeData(tables, dependencies, enumMap) {
     // Analyze table sizes
     const tableCounts = await this.analyzeTableSizes(tables);
-    
+
     // Synchronize data in dependency order
     await this.performDataSync(tables, dependencies, enumMap, tableCounts);
   }
@@ -156,7 +175,7 @@ class SyncOrchestratorService {
   async analyzeTableSizes(tables) {
     logger.subsection('Analyzing Table Sizes');
     const tableCounts = {};
-    
+
     logger.createProgressBar(tables.length, 'Counting rows');
     for (let i = 0; i < tables.length; i++) {
       const table = tables[i];
@@ -166,16 +185,21 @@ class SyncOrchestratorService {
     }
     logger.stopProgress();
 
-    const totalRemoteRows = Object.values(tableCounts).reduce((sum, count) => sum + count, 0);
+    const totalRemoteRows = Object.values(tableCounts).reduce(
+      (sum, count) => sum + count,
+      0
+    );
     this.syncStats.totalRows = totalRemoteRows;
-    
-    logger.success(`Found ${totalRemoteRows.toLocaleString()} total rows across ${tables.length} tables`);
-    
+
+    logger.success(
+      `Found ${totalRemoteRows.toLocaleString()} total rows across ${tables.length} tables`
+    );
+
     // Show largest tables
     const sortedBySize = Object.entries(tableCounts)
       .sort(([, a], [, b]) => b - a)
       .slice(0, 5);
-      
+
     if (sortedBySize.length > 0) {
       logger.info('Largest tables:');
       sortedBySize.forEach(([name, count]) => {
@@ -195,19 +219,27 @@ class SyncOrchestratorService {
    */
   async performDataSync(tables, dependencies, enumMap, tableCounts) {
     logger.subsection('Synchronizing Data');
-    
+
     const localConnection = await connectionService.connectLocal();
-    const tableNames = tables.map(t => t.name);
-    const insertionOrder = dataService.sortTablesByDependencies(tableNames, dependencies);
-    const sortedTables = insertionOrder.map(name => tables.find(t => t.name === name)).filter(Boolean);
-    
+    const tableNames = tables.map((t) => t.name);
+    const insertionOrder = dataService.sortTablesByDependencies(
+      tableNames,
+      dependencies
+    );
+    const sortedTables = insertionOrder
+      .map((name) => tables.find((t) => t.name === name))
+      .filter(Boolean);
+
     logger.createProgressBar(tables.length, 'Syncing tables');
 
     for (let i = 0; i < sortedTables.length; i++) {
       const table = sortedTables[i];
       const rowCount = tableCounts[table.name] || 0;
 
-      logger.updateProgress(i + 1, `${table.name} (${rowCount.toLocaleString()} rows)`);
+      logger.updateProgress(
+        i + 1,
+        `${table.name} (${rowCount.toLocaleString()} rows)`
+      );
 
       if (rowCount === 0) {
         this.syncStats.successfulTables++;
@@ -225,7 +257,7 @@ class SyncOrchestratorService {
         });
       }
     }
-    
+
     logger.stopProgress();
 
     if (this.syncStats.failedTables.length > 0) {
@@ -240,10 +272,15 @@ class SyncOrchestratorService {
    * @param {Object} enumMap - Enum type mappings
    */
   async syncSingleTable(connection, table, enumMap) {
-    const extractResult = await metabaseService.extractAllTableData(table.id, table.name);
+    const extractResult = await metabaseService.extractAllTableData(
+      table.id,
+      table.name
+    );
 
     if (!extractResult.success || extractResult.data.length === 0) {
-      throw new Error(`Data extraction failed: ${extractResult.error || 'No data returned'}`);
+      throw new Error(
+        `Data extraction failed: ${extractResult.error || 'No data returned'}`
+      );
     }
 
     const transformedData = await dataTransformationService.transformTableData(
@@ -264,14 +301,17 @@ class SyncOrchestratorService {
     );
 
     if (!insertResult.success) {
-      const errorDetails = insertResult.errors && insertResult.errors.length > 0
-        ? insertResult.errors[0].error
-        : 'Unknown insertion error';
+      const errorDetails =
+        insertResult.errors && insertResult.errors.length > 0
+          ? insertResult.errors[0].error
+          : 'Unknown insertion error';
       throw new Error(`Data insertion failed: ${errorDetails}`);
     }
 
     if (insertResult.insertedRows !== extractResult.data.length) {
-      throw new Error(`Row count mismatch: expected ${extractResult.data.length}, inserted ${insertResult.insertedRows}`);
+      throw new Error(
+        `Row count mismatch: expected ${extractResult.data.length}, inserted ${insertResult.insertedRows}`
+      );
     }
 
     this.syncStats.syncedRows += insertResult.insertedRows;
@@ -283,8 +323,10 @@ class SyncOrchestratorService {
    * @param {Object} dependencies - Table dependencies
    */
   async handleSyncFailures(tables, dependencies) {
-    logger.error(`SYNC FAILED: ${this.syncStats.failedTables.length} tables failed to sync. Rolling back...`);
-    
+    logger.error(
+      `SYNC FAILED: ${this.syncStats.failedTables.length} tables failed to sync. Rolling back...`
+    );
+
     this.syncStats.failedTables.forEach(({ name, error, details }) => {
       logger.error(`  - ${name}: ${error} (${details})`);
     });
@@ -303,19 +345,23 @@ class SyncOrchestratorService {
    */
   async performRollback(tables, dependencies) {
     logger.startSpinner('Rolling back changes');
-    
+
     const localConnection = await connectionService.connectLocal();
-    const tableNames = tables.map(t => t.name);
-    const clearingOrder = dataService.sortTablesByDependencies(tableNames, dependencies).reverse();
+    const tableNames = tables.map((t) => t.name);
+    const clearingOrder = dataService
+      .sortTablesByDependencies(tableNames, dependencies)
+      .reverse();
 
     for (const tableName of clearingOrder) {
       try {
         await localConnection.query(`DELETE FROM "${tableName}"`);
       } catch (rollbackError) {
-        logger.warn(`Could not rollback table ${tableName}: ${rollbackError.message}`);
+        logger.warn(
+          `Could not rollback table ${tableName}: ${rollbackError.message}`
+        );
       }
     }
-    
+
     logger.stopSpinner(true, 'Rollback completed');
   }
 
@@ -325,7 +371,9 @@ class SyncOrchestratorService {
    */
   async finalizeSynchronization() {
     this.syncStats.endTime = Date.now();
-    const duration = Math.round((this.syncStats.endTime - this.syncStats.startTime) / 1000);
+    const duration = Math.round(
+      (this.syncStats.endTime - this.syncStats.startTime) / 1000
+    );
     const minutes = Math.floor(duration / 60);
     const seconds = duration % 60;
 
@@ -336,7 +384,9 @@ class SyncOrchestratorService {
       successRate: '100%'
     });
 
-    logger.success('Local database is now an exact replica of the remote database');
+    logger.success(
+      'Local database is now an exact replica of the remote database'
+    );
     logger.success('Database synchronization completed successfully');
 
     return {
@@ -363,7 +413,7 @@ class SyncOrchestratorService {
   async performDryRun(credentials) {
     this.syncStats.startTime = Date.now();
     this.syncStats.failedTables = [];
-    
+
     logger.section('MetaExodus - Dry Run Analysis');
 
     try {
@@ -373,7 +423,11 @@ class SyncOrchestratorService {
 
       const tableCounts = await this.analyzeTableSizes(tables);
 
-      const dryRunResult = await this.analyzePlannedChanges(tables, tableCounts, enumMap);
+      const dryRunResult = await this.analyzePlannedChanges(
+        tables,
+        tableCounts,
+        enumMap
+      );
 
       if (!dryRunResult.success) {
         return { success: false, error: dryRunResult.error };
@@ -384,17 +438,29 @@ class SyncOrchestratorService {
 
       logger.section('Dry Run Summary');
       logger.table([
-        { 'Metric': 'Total Tables', 'Value': tables.length.toString() },
-        { 'Metric': 'Tables with Data', 'Value': dryRunResult.tablesWithData.toString() },
-        { 'Metric': 'Total Rows to Copy', 'Value': dryRunResult.totalRowsToSync.toLocaleString() },
-        { 'Metric': 'Estimated Duration', 'Value': summary.estimatedDuration },
-        { 'Metric': 'Schema Changes', 'Value': dryRunResult.schemaChanges.toString() },
-        { 'Metric': 'Data Transformations', 'Value': dryRunResult.dataTransformations.toString() }
+        { Metric: 'Total Tables', Value: tables.length.toString() },
+        {
+          Metric: 'Tables with Data',
+          Value: dryRunResult.tablesWithData.toString()
+        },
+        {
+          Metric: 'Total Rows to Copy',
+          Value: dryRunResult.totalRowsToSync.toLocaleString()
+        },
+        { Metric: 'Estimated Duration', Value: summary.estimatedDuration },
+        {
+          Metric: 'Schema Changes',
+          Value: dryRunResult.schemaChanges.toString()
+        },
+        {
+          Metric: 'Data Transformations',
+          Value: dryRunResult.dataTransformations.toString()
+        }
       ]);
 
       if (dryRunResult.potentialIssues.length > 0) {
         logger.subsection('Potential Issues');
-        dryRunResult.potentialIssues.forEach(issue => {
+        dryRunResult.potentialIssues.forEach((issue) => {
           logger.warn(`${issue.table}: ${issue.issue}`);
         });
       }
@@ -434,7 +500,10 @@ class SyncOrchestratorService {
         const table = tables[i];
         const rowCount = tableCounts[table.name] || 0;
 
-        logger.updateProgress(i + 1, `${table.name} (${rowCount.toLocaleString()} rows)`);
+        logger.updateProgress(
+          i + 1,
+          `${table.name} (${rowCount.toLocaleString()} rows)`
+        );
 
         if (rowCount > 0) {
           tablesWithData++;
@@ -448,34 +517,41 @@ class SyncOrchestratorService {
             );
 
             if (sampleResult.success && sampleResult.data.length > 0) {
-              const transformResult = await dataTransformationService.transformTableData(
-                localConnection,
-                table.name,
-                sampleResult.data,
-                { enumMap, validateOnly: true }
-              );
+              const transformResult =
+                await dataTransformationService.transformTableData(
+                  localConnection,
+                  table.name,
+                  sampleResult.data,
+                  { enumMap, validateOnly: true }
+                );
 
               if (!transformResult.success) {
                 potentialIssues.push({
                   table: table.name,
                   issue: 'Data transformation issues detected',
-                  details: transformResult.issues.map(i => i.message).join(', ')
+                  details: transformResult.issues
+                    .map((i) => i.message)
+                    .join(', ')
                 });
               } else if (transformResult.issues.length > 0) {
                 dataTransformations++;
                 potentialIssues.push({
                   table: table.name,
                   issue: `${transformResult.issues.length} data transformation(s) needed`,
-                  details: transformResult.issues.map(i => i.message).join(', ')
+                  details: transformResult.issues
+                    .map((i) => i.message)
+                    .join(', ')
                 });
               }
             }
 
-            const schemaInfo = await schemaDiscoveryService.getTableSchemaInfo(localConnection, table.name);
+            const schemaInfo = await schemaDiscoveryService.getTableSchemaInfo(
+              localConnection,
+              table.name
+            );
             if (schemaInfo.enumColumns && schemaInfo.enumColumns.length > 0) {
               schemaChanges++;
             }
-
           } catch (error) {
             potentialIssues.push({
               table: table.name,
@@ -509,12 +585,16 @@ class SyncOrchestratorService {
    */
   generateDryRunSummary(analysisResult, _tableCounts) {
     const endTime = Date.now();
-    const duration = this.syncStats.startTime ? endTime - this.syncStats.startTime : 0;
+    const duration = this.syncStats.startTime
+      ? endTime - this.syncStats.startTime
+      : 0;
     const durationMinutes = Math.floor(duration / 60000);
     const durationSeconds = Math.floor((duration % 60000) / 1000);
-    
+
     // Estimate sync duration based on row count (rough estimate: 1000 rows per second)
-    const estimatedSyncSeconds = Math.ceil(analysisResult.totalRowsToSync / 1000);
+    const estimatedSyncSeconds = Math.ceil(
+      analysisResult.totalRowsToSync / 1000
+    );
     const estimatedMinutes = Math.floor(estimatedSyncSeconds / 60);
     const remainingSeconds = estimatedSyncSeconds % 60;
 

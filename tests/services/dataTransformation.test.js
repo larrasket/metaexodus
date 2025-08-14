@@ -10,7 +10,9 @@ jest.unstable_mockModule('../../src/services/schemaDiscovery.js', () => ({
 }));
 
 // Now import the service
-const { DataTransformationService, dataTransformationService } = await import('../../src/services/dataTransformation.js');
+const { DataTransformationService, dataTransformationService } = await import(
+  '../../src/services/dataTransformation.js'
+);
 
 describe('DataTransformationService', () => {
   let service;
@@ -18,7 +20,7 @@ describe('DataTransformationService', () => {
 
   beforeEach(() => {
     service = new DataTransformationService();
-    mockConnection = { 
+    mockConnection = {
       query: jest.fn().mockResolvedValue({ rows: [] })
     };
     jest.clearAllMocks();
@@ -36,7 +38,9 @@ describe('DataTransformationService', () => {
         }
       ];
 
-      mockSchemaDiscoveryService.discoverTableSchema.mockResolvedValue(mockSchema);
+      mockSchemaDiscoveryService.discoverTableSchema.mockResolvedValue(
+        mockSchema
+      );
 
       const data = [
         { id: 1, status: 'ACTIVITY' },
@@ -47,7 +51,12 @@ describe('DataTransformationService', () => {
         status_enum: ['INDIVIDUAL', 'GROUP', 'ALL']
       };
 
-      const result = await service.transformTableData(mockConnection, 'test_table', data, enumMap);
+      const result = await service.transformTableData(
+        mockConnection,
+        'test_table',
+        data,
+        enumMap
+      );
 
       expect(result).toHaveLength(2);
       expect(result[0].status).toBe('INDIVIDUAL'); // ACTIVITY -> INDIVIDUAL (common mapping)
@@ -55,7 +64,12 @@ describe('DataTransformationService', () => {
     });
 
     test('should handle empty data', async () => {
-      const result = await service.transformTableData(mockConnection, 'test_table', [], {});
+      const result = await service.transformTableData(
+        mockConnection,
+        'test_table',
+        [],
+        {}
+      );
 
       expect(result).toEqual([]);
     });
@@ -71,7 +85,12 @@ describe('DataTransformationService', () => {
       ]);
 
       const data = [{ id: 1, name: 'test' }];
-      const result = await service.transformTableData(mockConnection, 'test_table', data, {});
+      const result = await service.transformTableData(
+        mockConnection,
+        'test_table',
+        data,
+        {}
+      );
 
       expect(result).toEqual(data);
     });
@@ -79,37 +98,67 @@ describe('DataTransformationService', () => {
 
   describe('transformEnumValue', () => {
     test('should return exact match', () => {
-      const result = service.transformEnumValue('ACTIVE', ['ACTIVE', 'INACTIVE'], 'test', 'status');
+      const result = service.transformEnumValue(
+        'ACTIVE',
+        ['ACTIVE', 'INACTIVE'],
+        'test',
+        'status'
+      );
 
       expect(result).toBe('ACTIVE');
     });
 
     test('should perform case insensitive match', () => {
-      const result = service.transformEnumValue('active', ['ACTIVE', 'INACTIVE'], 'test', 'status');
+      const result = service.transformEnumValue(
+        'active',
+        ['ACTIVE', 'INACTIVE'],
+        'test',
+        'status'
+      );
 
       expect(result).toBe('ACTIVE');
     });
 
     test('should perform partial match', () => {
-      const result = service.transformEnumValue('ACT', ['ACTIVE', 'INACTIVE'], 'test', 'status');
+      const result = service.transformEnumValue(
+        'ACT',
+        ['ACTIVE', 'INACTIVE'],
+        'test',
+        'status'
+      );
 
       expect(result).toBe('ACTIVE');
     });
 
     test('should use common mappings', () => {
-      const result = service.transformEnumValue('activity', ['INDIVIDUAL', 'GROUP'], 'test', 'type');
+      const result = service.transformEnumValue(
+        'activity',
+        ['INDIVIDUAL', 'GROUP'],
+        'test',
+        'type'
+      );
 
       expect(result).toBe('INDIVIDUAL');
     });
 
     test('should default to first valid value', () => {
-      const result = service.transformEnumValue('unknown', ['FIRST', 'SECOND'], 'test', 'status');
+      const result = service.transformEnumValue(
+        'unknown',
+        ['FIRST', 'SECOND'],
+        'test',
+        'status'
+      );
 
       expect(result).toBe('FIRST');
     });
 
     test('should return null for empty valid values', () => {
-      const result = service.transformEnumValue('unknown', [], 'test', 'status');
+      const result = service.transformEnumValue(
+        'unknown',
+        [],
+        'test',
+        'status'
+      );
 
       expect(result).toBeNull();
     });
@@ -234,7 +283,9 @@ describe('DataTransformationService', () => {
 
   describe('singleton instance', () => {
     test('should be an instance of DataTransformationService', () => {
-      expect(dataTransformationService).toBeInstanceOf(DataTransformationService);
+      expect(dataTransformationService).toBeInstanceOf(
+        DataTransformationService
+      );
     });
   });
 });

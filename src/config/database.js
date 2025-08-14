@@ -1,4 +1,4 @@
-import { validateEnvironment, createEnvTemplate } from '../utils/env.js';
+import { createEnvTemplate, validateEnvironment } from "../utils/env.js";
 
 class DatabaseConfig {
   constructor(host, port, database, username, password, ssl = false) {
@@ -11,8 +11,11 @@ class DatabaseConfig {
   }
 
   getConnectionString() {
-    const sslParam = this.ssl ? '?ssl=true' : '';
-    return `postgresql://${this.username}:${this.password}@${this.host}:${this.port}/${this.database}${sslParam}`;
+    const sslParam = this.ssl ? "?ssl=true" : "";
+    // URL encode the username and password to handle special characters
+    const encodedUsername = encodeURIComponent(this.username);
+    const encodedPassword = encodeURIComponent(this.password);
+    return `postgresql://${encodedUsername}:${encodedPassword}@${this.host}:${this.port}/${this.database}${sslParam}`;
   }
 
   getConnectionOptions() {
@@ -23,39 +26,45 @@ class DatabaseConfig {
       user: this.username,
       password: this.password,
       ssl: this.ssl,
-      connectionTimeoutMillis: parseInt(process.env.DB_CONNECTION_TIMEOUT) || 30000,
+      connectionTimeoutMillis:
+        parseInt(process.env.DB_CONNECTION_TIMEOUT) || 30000,
       idleTimeoutMillis: 30000,
       max: 10,
-      min: 2
+      min: 2,
     };
   }
 
   validate() {
     const errors = [];
 
-    if (!this.host || typeof this.host !== 'string') {
-      errors.push('Host is required and must be a string');
+    if (!this.host || typeof this.host !== "string") {
+      errors.push("Host is required and must be a string");
     }
 
-    if (!this.port || isNaN(this.port) || this.port <= 0 || this.port > 65535) {
-      errors.push('Port must be a valid number between 1 and 65535');
+    if (
+      !this.port ||
+      Number.isNaN(this.port) ||
+      this.port <= 0 ||
+      this.port > 65535
+    ) {
+      errors.push("Port must be a valid number between 1 and 65535");
     }
 
-    if (!this.database || typeof this.database !== 'string') {
-      errors.push('Database name is required and must be a string');
+    if (!this.database || typeof this.database !== "string") {
+      errors.push("Database name is required and must be a string");
     }
 
-    if (!this.username || typeof this.username !== 'string') {
-      errors.push('Username is required and must be a string');
+    if (!this.username || typeof this.username !== "string") {
+      errors.push("Username is required and must be a string");
     }
 
-    if (!this.password || typeof this.password !== 'string') {
-      errors.push('Password is required and must be a string');
+    if (!this.password || typeof this.password !== "string") {
+      errors.push("Password is required and must be a string");
     }
 
     return {
       valid: errors.length === 0,
-      errors
+      errors,
     };
   }
 
@@ -65,8 +74,8 @@ class DatabaseConfig {
       port: this.port,
       database: this.database,
       username: this.username,
-      password: '***masked***',
-      ssl: this.ssl
+      password: "***masked***",
+      ssl: this.ssl,
     };
   }
 }
@@ -84,8 +93,8 @@ class DatabaseConfigManager {
     if (!envValidation.success) {
       return {
         success: false,
-        error: 'Environment validation failed',
-        details: envValidation.allErrors
+        error: "Environment validation failed",
+        details: envValidation.allErrors,
       };
     }
 
@@ -96,7 +105,7 @@ class DatabaseConfigManager {
         process.env.DB_LOCAL_NAME,
         process.env.DB_LOCAL_USERNAME,
         process.env.DB_LOCAL_PASSWORD,
-        process.env.DB_LOCAL_SSL === 'true'
+        process.env.DB_LOCAL_SSL === "true"
       );
 
       this.remoteConfig = null;
@@ -106,36 +115,39 @@ class DatabaseConfigManager {
       if (!localValidation.valid) {
         return {
           success: false,
-          error: 'Database configuration validation failed',
-          details: localValidation.errors.map(e => `Local DB: ${e}`)
+          error: "Database configuration validation failed",
+          details: localValidation.errors.map((e) => `Local DB: ${e}`),
         };
       }
 
       this.validated = true;
       return {
         success: true,
-        message: 'Database configurations initialized successfully'
+        message: "Database configurations initialized successfully",
       };
-
     } catch (error) {
       return {
         success: false,
-        error: 'Failed to initialize database configurations',
-        details: [error.message]
+        error: "Failed to initialize database configurations",
+        details: [error.message],
       };
     }
   }
 
   getLocalConfig() {
     if (!this.validated) {
-      throw new Error('Configuration manager not initialized. Call initialize() first.');
+      throw new Error(
+        "Configuration manager not initialized. Call initialize() first."
+      );
     }
     return this.localConfig;
   }
 
   getRemoteConfig() {
     if (!this.validated) {
-      throw new Error('Configuration manager not initialized. Call initialize() first.');
+      throw new Error(
+        "Configuration manager not initialized. Call initialize() first."
+      );
     }
     return this.remoteConfig;
   }
@@ -144,7 +156,7 @@ class DatabaseConfigManager {
     if (!this.localConfig) {
       return {
         valid: false,
-        errors: ['Local configuration not initialized']
+        errors: ["Local configuration not initialized"],
       };
     }
 
@@ -152,7 +164,7 @@ class DatabaseConfigManager {
 
     return {
       valid: localValidation.valid,
-      errors: localValidation.errors.map(e => `Local DB: ${e}`)
+      errors: localValidation.errors.map((e) => `Local DB: ${e}`),
     };
   }
 
@@ -163,7 +175,7 @@ class DatabaseConfigManager {
   getMaskedConfigs() {
     return {
       local: this.localConfig ? this.localConfig.getMaskedConfig() : null,
-      remote: this.remoteConfig ? this.remoteConfig.getMaskedConfig() : null
+      remote: this.remoteConfig ? this.remoteConfig.getMaskedConfig() : null,
     };
   }
 

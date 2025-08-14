@@ -1,7 +1,11 @@
-import { createLogger, format as _format, transports as _transports } from 'winston';
-import ora from 'ora';
-import { SingleBar } from 'cli-progress';
 import chalk from 'chalk';
+import { SingleBar } from 'cli-progress';
+import ora from 'ora';
+import {
+  format as _format,
+  transports as _transports,
+  createLogger
+} from 'winston';
 
 const { gray, red, yellow, blue, green, cyan, bold } = chalk;
 
@@ -15,14 +19,12 @@ class Logger {
         _format.printf(({ timestamp, level, message, stack }) => {
           const coloredLevel = this.colorizeLevel(level);
           const time = gray(timestamp.split('T')[1].split('.')[0]);
-          return `${time} ${coloredLevel} ${message}${stack ? '\n' + red(stack) : ''}`;
+          return `${time} ${coloredLevel} ${message}${stack ? `\n${red(stack)}` : ''}`;
         })
       ),
-      transports: [
-        new _transports.Console()
-      ]
+      transports: [new _transports.Console()]
     });
-    
+
     this.progressBars = new Map();
     this.spinners = new Map();
   }
@@ -34,7 +36,9 @@ class Logger {
       info: blue.bold,
       debug: gray.bold
     };
-    return colors[level] ? colors[level](level.toUpperCase()) : level.toUpperCase();
+    return colors[level]
+      ? colors[level](level.toUpperCase())
+      : level.toUpperCase();
   }
 
   info(message, data = null) {
@@ -58,7 +62,7 @@ class Logger {
   }
 
   success(message) {
-    console.log(green('✓ ' + message));
+    console.log(green(`✓ ${message}`));
   }
 
   startSpinner(text, id = 'default') {
@@ -96,7 +100,7 @@ class Logger {
       barIncompleteChar: '░',
       hideCursor: true
     });
-    
+
     bar.start(total, 0);
     this.progressBars.set(id, bar);
     return bar;
@@ -122,56 +126,60 @@ class Logger {
 
   section(title) {
     const line = '═'.repeat(60);
-    console.log(blue.bold('\n' + line));
+    console.log(blue.bold(`\n${line}`));
     console.log(blue.bold(title.toUpperCase()));
-    console.log(blue.bold(line + '\n'));
+    console.log(blue.bold(`${line}\n`));
   }
 
   subsection(title) {
-    console.log(yellow.bold('\n' + title));
+    console.log(yellow.bold(`\n${title}`));
     console.log(yellow('─'.repeat(title.length)));
   }
 
   table(data, headers = null) {
-    if (!data || data.length === 0) return;
-    
+    if (!data || data.length === 0) {
+      return;
+    }
+
     const keys = headers || Object.keys(data[0]);
-    const maxWidths = keys.map(key => 
-      Math.max(key.length, ...data.map(row => String(row[key] || '').length))
+    const maxWidths = keys.map((key) =>
+      Math.max(key.length, ...data.map((row) => String(row[key] || '').length))
     );
 
-    const headerRow = keys.map((key, i) => 
-      bold(key.padEnd(maxWidths[i]))
-    ).join(' | ');
-    
-    const separator = maxWidths.map(width => '─'.repeat(width)).join('─┼─');
-    
+    const headerRow = keys
+      .map((key, i) => bold(key.padEnd(maxWidths[i])))
+      .join(' | ');
+
+    const separator = maxWidths.map((width) => '─'.repeat(width)).join('─┼─');
+
     console.log(headerRow);
     console.log(separator);
-    
-    data.forEach(row => {
-      const dataRow = keys.map((key, i) => 
-        String(row[key] || '').padEnd(maxWidths[i])
-      ).join(' | ');
+
+    data.forEach((row) => {
+      const dataRow = keys
+        .map((key, i) => String(row[key] || '').padEnd(maxWidths[i]))
+        .join(' | ');
       console.log(dataRow);
     });
   }
 
   summary(stats) {
     this.section('SYNC SUMMARY');
-    
+
     const summaryData = Object.entries(stats).map(([key, value]) => ({
-      Metric: key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()),
+      Metric: key
+        .replace(/([A-Z])/g, ' $1')
+        .replace(/^./, (str) => str.toUpperCase()),
       Value: typeof value === 'number' ? value.toLocaleString() : value
     }));
-    
+
     this.table(summaryData);
     console.log();
   }
 
   cleanup() {
-    this.spinners.forEach(spinner => spinner.stop());
-    this.progressBars.forEach(bar => bar.stop());
+    this.spinners.forEach((spinner) => spinner.stop());
+    this.progressBars.forEach((bar) => bar.stop());
     this.spinners.clear();
     this.progressBars.clear();
   }

@@ -1,5 +1,5 @@
-import { existsSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const REQUIRED_ENV_VARS = [
   'DB_LOCAL_HOST',
@@ -47,17 +47,24 @@ function validateEnvVarFormats() {
 
   const localPort = process.env.DB_LOCAL_PORT;
 
-  if (localPort && (isNaN(localPort) || parseInt(localPort) <= 0 || parseInt(localPort) > 65535)) {
+  if (
+    localPort &&
+    (Number.isNaN(localPort) ||
+      parseInt(localPort) <= 0 ||
+      parseInt(localPort) > 65535)
+  ) {
     errors.push('DB_LOCAL_PORT must be a valid port number (1-65535)');
   }
 
   const timeout = process.env.DB_CONNECTION_TIMEOUT;
-  if (timeout && (isNaN(timeout) || parseInt(timeout) < 1000)) {
-    errors.push('DB_CONNECTION_TIMEOUT must be a number >= 1000 (milliseconds)');
+  if (timeout && (Number.isNaN(timeout) || parseInt(timeout) < 1000)) {
+    errors.push(
+      'DB_CONNECTION_TIMEOUT must be a number >= 1000 (milliseconds)'
+    );
   }
 
   const batchSize = process.env.DB_BATCH_SIZE;
-  if (batchSize && (isNaN(batchSize) || parseInt(batchSize) < 1)) {
+  if (batchSize && (Number.isNaN(batchSize) || parseInt(batchSize) < 1)) {
     errors.push('DB_BATCH_SIZE must be a positive number');
   }
 
@@ -99,6 +106,7 @@ DB_LOCAL_PASSWORD=your_local_password
 METABASE_BASE_URL=https://your-metabase-instance.com
 METABASE_DATABASE_ID=1
 DB_REMOTE_USERNAME=your_metabase_username
+# Note: Passwords with special characters should be quoted: DB_REMOTE_PASSWORD="your_password_with_special_chars"
 DB_REMOTE_PASSWORD=your_metabase_password
 
 # Optional Configuration
@@ -120,17 +128,21 @@ function validateEnvironment() {
 
   const requiredValidation = validateRequiredEnvVars();
 
-  const formatValidation = requiredValidation.success ?
-    validateEnvVarFormats() :
-    { success: true, errors: [] };
+  const formatValidation = requiredValidation.success
+    ? validateEnvVarFormats()
+    : { success: true, errors: [] };
 
   return {
     success: requiredValidation.success && formatValidation.success,
     required: requiredValidation,
     format: formatValidation,
     allErrors: [
-      ...requiredValidation.missing.map(v => `Missing required variable: ${v}`),
-      ...requiredValidation.invalid.map(v => `Invalid value for variable: ${v}`),
+      ...requiredValidation.missing.map(
+        (v) => `Missing required variable: ${v}`
+      ),
+      ...requiredValidation.invalid.map(
+        (v) => `Invalid value for variable: ${v}`
+      ),
       ...formatValidation.errors
     ]
   };

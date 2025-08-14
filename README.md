@@ -12,7 +12,7 @@ local copy of production data for testing and development.
 ## Requirements
 
 - Node.js 16+
-- PostgreSQL running locally (with the same schema)
+- PostgreSQL running locally (database will be created automatically)
 - Access to a Metabase instance
 
 ## Quick Start
@@ -47,6 +47,7 @@ DB_LOCAL_PASSWORD=your_password
 METABASE_BASE_URL=https://your-metabase.com
 METABASE_DATABASE_ID=1
 DB_REMOTE_USERNAME=your_metabase_email
+# For passwords with special characters, use quotes: DB_REMOTE_PASSWORD="your_password_with_special_chars"
 DB_REMOTE_PASSWORD=your_metabase_password
 
 # Optional settings
@@ -62,11 +63,10 @@ yarn start
 
 That's it! Watch as it copies everything over.
 
-
 ## Finding your Metabase Database ID
 
 1. Go to your Metabase admin panel
-2. Click on "Databases" 
+2. Click on "Databases"
 3. Find your database in the list
 4. The ID is in the URL when you click on it: `/admin/databases/4` means ID is `4`
 
@@ -85,7 +85,7 @@ yarn lint
 yarn lint:fix
 ```
 
-## TODO 
+## TODO
 
 - [ ] Incremental sync: Only copy new/changed data instead of everything
 - [ ] Schema-only mode: Just copy table structures without data
@@ -94,8 +94,7 @@ yarn lint:fix
 - [ ] Multiple database support: MySQL, SQLite, etc.
 
 ### Current Limitations
-- Requires existing database schema (can't create the database for you)
+
+- Auto-creates the database and ensures schema; complex nested structures are stored as JSONB
 - Only works with PostgreSQL locally
 - No way to exclude sensitive tables or columns
-
-

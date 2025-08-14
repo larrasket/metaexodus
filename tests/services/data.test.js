@@ -1,7 +1,6 @@
 import { jest } from '@jest/globals';
-
-import { DataService, dataService } from '../../src/services/data.js';
 import { connectionService } from '../../src/services/connection.js';
+import { DataService, dataService } from '../../src/services/data.js';
 
 describe('Data Service', () => {
   let originalEnv;
@@ -13,7 +12,9 @@ describe('Data Service', () => {
 
     jest.clearAllMocks();
 
-    jest.spyOn(connectionService, 'initialize').mockResolvedValue({ success: true });
+    jest
+      .spyOn(connectionService, 'initialize')
+      .mockResolvedValue({ success: true });
     connectionService.isInitialized = true;
   });
 
@@ -62,7 +63,9 @@ describe('Data Service', () => {
       const tableNames = await service.getTableNames(mockConnection);
 
       expect(tableNames).toEqual(['users', 'orders', 'products']);
-      expect(mockConnection.query).toHaveBeenCalledWith(expect.stringContaining('information_schema.tables'));
+      expect(mockConnection.query).toHaveBeenCalledWith(
+        expect.stringContaining('information_schema.tables')
+      );
     });
 
     test('should handle error when getting table names', async () => {
@@ -73,7 +76,9 @@ describe('Data Service', () => {
         query: jest.fn().mockRejectedValue(new Error('Database error'))
       };
 
-      await expect(service.getTableNames(mockConnection)).rejects.toThrow('Failed to get table names: Database error');
+      await expect(service.getTableNames(mockConnection)).rejects.toThrow(
+        'Failed to get table names: Database error'
+      );
     });
 
     test('should get table dependencies', async () => {
@@ -109,8 +114,12 @@ describe('Data Service', () => {
       const sorted = service.sortTablesByDependencies(tableNames, dependencies);
 
       expect(sorted.indexOf('users')).toBeLessThan(sorted.indexOf('orders'));
-      expect(sorted.indexOf('products')).toBeLessThan(sorted.indexOf('order_items'));
-      expect(sorted.indexOf('orders')).toBeLessThan(sorted.indexOf('order_items'));
+      expect(sorted.indexOf('products')).toBeLessThan(
+        sorted.indexOf('order_items')
+      );
+      expect(sorted.indexOf('orders')).toBeLessThan(
+        sorted.indexOf('order_items')
+      );
     });
 
     test('should handle circular dependencies gracefully', () => {
@@ -141,7 +150,9 @@ describe('Data Service', () => {
       const count = await service.getTableRowCount(mockConnection, 'users');
 
       expect(count).toBe(150);
-      expect(mockConnection.query).toHaveBeenCalledWith('SELECT COUNT(*) as count FROM "users";');
+      expect(mockConnection.query).toHaveBeenCalledWith(
+        'SELECT COUNT(*) as count FROM "users";'
+      );
     });
 
     test('should extract table data with batching', async () => {
@@ -149,9 +160,10 @@ describe('Data Service', () => {
       await service.initialize();
 
       const mockConnection = {
-        query: jest.fn()
-          .mockResolvedValueOnce({ rows: [{ count: '250' }] }) 
-          .mockResolvedValueOnce({ 
+        query: jest
+          .fn()
+          .mockResolvedValueOnce({ rows: [{ count: '250' }] })
+          .mockResolvedValueOnce({
             rows: [
               { id: 1, name: 'User 1' },
               { id: 2, name: 'User 2' }
@@ -160,7 +172,10 @@ describe('Data Service', () => {
           })
       };
 
-      const result = await service.extractTableData(mockConnection, 'users', { offset: 0, limit: 2 });
+      const result = await service.extractTableData(mockConnection, 'users', {
+        offset: 0,
+        limit: 2
+      });
 
       expect(result).toEqual({
         tableName: 'users',
@@ -184,7 +199,10 @@ describe('Data Service', () => {
         query: jest.fn().mockResolvedValue({ rows: [{ count: '0' }] })
       };
 
-      const result = await service.extractTableData(mockConnection, 'empty_table');
+      const result = await service.extractTableData(
+        mockConnection,
+        'empty_table'
+      );
 
       expect(result).toEqual({
         tableName: 'empty_table',
@@ -198,25 +216,30 @@ describe('Data Service', () => {
 
     test('should extract all table data with batching', async () => {
       const service = new DataService();
-      service.configureBatchSize(2); 
+      service.configureBatchSize(2);
       await service.initialize();
 
       const mockConnection = {
-        query: jest.fn()
-          .mockResolvedValueOnce({ rows: [{ count: '3' }] }) 
-          .mockResolvedValueOnce({ 
+        query: jest
+          .fn()
+          .mockResolvedValueOnce({ rows: [{ count: '3' }] })
+          .mockResolvedValueOnce({
             rows: [{ id: 1 }, { id: 2 }],
             fields: [{ name: 'id' }]
           })
-          .mockResolvedValueOnce({ rows: [{ count: '3' }] }) 
-          .mockResolvedValueOnce({ 
+          .mockResolvedValueOnce({ rows: [{ count: '3' }] })
+          .mockResolvedValueOnce({
             rows: [{ id: 3 }],
             fields: [{ name: 'id' }]
           })
       };
 
       const batchCallback = jest.fn();
-      const result = await service.extractAllTableData(mockConnection, 'test_table', batchCallback);
+      const result = await service.extractAllTableData(
+        mockConnection,
+        'test_table',
+        batchCallback
+      );
 
       expect(result.tableName).toBe('test_table');
       expect(result.data).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }]);
@@ -231,25 +254,29 @@ describe('Data Service', () => {
       await service.initialize();
 
       const mockConnection = {
-        query: jest.fn()
-          
+        query: jest
+          .fn()
+
           .mockResolvedValueOnce({
             rows: [{ table_name: 'users' }, { table_name: 'orders' }]
           })
-          
+
           .mockResolvedValueOnce({
             rows: [{ dependent_table: 'orders', referenced_table: 'users' }]
           })
-          
+
           .mockResolvedValueOnce({ rows: [{ count: '2' }] })
-          
+
           .mockResolvedValueOnce({
-            rows: [{ id: 1, name: 'User 1' }, { id: 2, name: 'User 2' }],
+            rows: [
+              { id: 1, name: 'User 1' },
+              { id: 2, name: 'User 2' }
+            ],
             fields: [{ name: 'id' }, { name: 'name' }]
           })
-          
+
           .mockResolvedValueOnce({ rows: [{ count: '1' }] })
-          
+
           .mockResolvedValueOnce({
             rows: [{ id: 1, user_id: 1, total: 100 }],
             fields: [{ name: 'id' }, { name: 'user_id' }, { name: 'total' }]
@@ -260,12 +287,17 @@ describe('Data Service', () => {
       const onTableComplete = jest.fn();
       const onBatch = jest.fn();
 
-      const result = await service.extractAllData(mockConnection, onTableStart, onTableComplete, onBatch);
+      const result = await service.extractAllData(
+        mockConnection,
+        onTableStart,
+        onTableComplete,
+        onBatch
+      );
 
       expect(result.success).toBe(true);
       expect(result.totalTables).toBe(2);
       expect(result.totalRows).toBe(3);
-      expect(result.tableOrder).toEqual(['users', 'orders']); 
+      expect(result.tableOrder).toEqual(['users', 'orders']);
       expect(onTableStart).toHaveBeenCalledTimes(2);
       expect(onTableComplete).toHaveBeenCalledTimes(2);
     });
@@ -275,16 +307,17 @@ describe('Data Service', () => {
       await service.initialize();
 
       const mockConnection = {
-        query: jest.fn()
-          
+        query: jest
+          .fn()
+
           .mockResolvedValueOnce({
             rows: [{ table_name: 'users' }, { table_name: 'bad_table' }]
           })
-          
+
           .mockResolvedValueOnce({ rows: [] })
-          
+
           .mockResolvedValueOnce({ rows: [{ count: '1' }] })
-          
+
           .mockResolvedValueOnce({
             rows: [{ id: 1, name: 'User 1' }],
             fields: [{ name: 'id' }, { name: 'name' }]
@@ -298,7 +331,7 @@ describe('Data Service', () => {
       expect(result.errors).toHaveLength(1);
       expect(result.errors[0].tableName).toBe('bad_table');
       expect(result.errors[0].error).toContain('Table does not exist');
-      expect(result.tables).toHaveLength(1); 
+      expect(result.tables).toHaveLength(1);
     });
 
     test('should handle no tables found', async () => {
@@ -321,16 +354,22 @@ describe('Data Service', () => {
       const service = new DataService();
       const mockConnection = { query: jest.fn() };
 
-      await expect(service.extractTableData(mockConnection, 'users')).rejects.toThrow('Data service not initialized');
-      await expect(service.extractAllTableData(mockConnection, 'users')).rejects.toThrow('Data service not initialized');
-      await expect(service.extractAllData(mockConnection)).rejects.toThrow('Data service not initialized');
+      await expect(
+        service.extractTableData(mockConnection, 'users')
+      ).rejects.toThrow('Data service not initialized');
+      await expect(
+        service.extractAllTableData(mockConnection, 'users')
+      ).rejects.toThrow('Data service not initialized');
+      await expect(service.extractAllData(mockConnection)).rejects.toThrow(
+        'Data service not initialized'
+      );
     });
 
     test('should get extraction statistics', () => {
       const service = new DataService();
       const stats = service.getExtractionStats();
 
-      expect(stats.batchSize).toBe(100); 
+      expect(stats.batchSize).toBe(100);
       expect(stats.initialized).toBe(false);
     });
 
@@ -340,7 +379,6 @@ describe('Data Service', () => {
 
       expect(service.batchSize).toBe(500);
 
-      
       service.configureBatchSize(0);
       expect(service.batchSize).toBe(500);
 
@@ -352,7 +390,7 @@ describe('Data Service', () => {
       delete process.env.DB_BATCH_SIZE;
       const service = new DataService();
 
-      expect(service.batchSize).toBe(1000); 
+      expect(service.batchSize).toBe(1000);
     });
 
     test('should handle extraction error gracefully', async () => {
@@ -363,7 +401,11 @@ describe('Data Service', () => {
         query: jest.fn().mockRejectedValue(new Error('Connection lost'))
       };
 
-      await expect(service.extractTableData(mockConnection, 'users')).rejects.toThrow('Failed to extract data from table users: Failed to get row count for table users: Connection lost');
+      await expect(
+        service.extractTableData(mockConnection, 'users')
+      ).rejects.toThrow(
+        'Failed to extract data from table users: Failed to get row count for table users: Connection lost'
+      );
     });
   });
 
@@ -406,8 +448,18 @@ describe('Data Service', () => {
       const mockConnection = {
         query: jest.fn().mockResolvedValue({
           rows: [
-            { column_name: 'id', data_type: 'integer', is_nullable: 'NO', column_default: 'nextval(...)' },
-            { column_name: 'name', data_type: 'character varying', is_nullable: 'YES', column_default: null }
+            {
+              column_name: 'id',
+              data_type: 'integer',
+              is_nullable: 'NO',
+              column_default: 'nextval(...)'
+            },
+            {
+              column_name: 'name',
+              data_type: 'character varying',
+              is_nullable: 'YES',
+              column_default: null
+            }
           ]
         })
       };
@@ -421,19 +473,20 @@ describe('Data Service', () => {
 
     test('should insert table data successfully', async () => {
       const service = new DataService();
-      service.configureBatchSize(2); 
+      service.configureBatchSize(2);
       await service.initialize();
 
       const mockConnection = {
-        query: jest.fn()
-          
+        query: jest
+          .fn()
+
           .mockResolvedValueOnce({
             rows: [
               { column_name: 'id', data_type: 'integer' },
               { column_name: 'name', data_type: 'varchar' }
             ]
           })
-          
+
           .mockResolvedValueOnce({ rowCount: 2 })
           .mockResolvedValueOnce({ rowCount: 1 })
       };
@@ -444,13 +497,17 @@ describe('Data Service', () => {
         { id: 3, name: 'User 3' }
       ];
 
-      const result = await service.insertTableData(mockConnection, 'users', testData);
+      const result = await service.insertTableData(
+        mockConnection,
+        'users',
+        testData
+      );
 
       expect(result.success).toBe(true);
       expect(result.insertedRows).toBe(3);
       expect(result.totalRows).toBe(3);
       expect(result.batches).toBe(2);
-      expect(mockConnection.query).toHaveBeenCalledTimes(3); 
+      expect(mockConnection.query).toHaveBeenCalledTimes(3);
     });
 
     test('should handle empty data insertion', async () => {
@@ -476,7 +533,8 @@ describe('Data Service', () => {
       await service.initialize();
 
       const mockConnection = {
-        query: jest.fn()
+        query: jest
+          .fn()
           .mockResolvedValueOnce({ rowCount: 10 })
           .mockResolvedValueOnce({
             rows: [{ column_name: 'id' }, { column_name: 'name' }]
@@ -484,11 +542,19 @@ describe('Data Service', () => {
           .mockResolvedValueOnce({ rowCount: 2 })
       };
 
-      const testData = [{ id: 1, name: 'User 1' }, { id: 2, name: 'User 2' }];
+      const testData = [
+        { id: 1, name: 'User 1' },
+        { id: 2, name: 'User 2' }
+      ];
 
-      const result = await service.insertTableData(mockConnection, 'users', testData, {
-        clearFirst: true
-      });
+      const result = await service.insertTableData(
+        mockConnection,
+        'users',
+        testData,
+        {
+          clearFirst: true
+        }
+      );
 
       expect(result.success).toBe(true);
       expect(mockConnection.query).toHaveBeenCalledWith('DELETE FROM "users";');
@@ -499,7 +565,8 @@ describe('Data Service', () => {
       await service.initialize();
 
       const mockConnection = {
-        query: jest.fn()
+        query: jest
+          .fn()
           .mockResolvedValueOnce({
             rows: [{ column_name: 'id' }, { column_name: 'name' }]
           })
@@ -508,7 +575,11 @@ describe('Data Service', () => {
 
       const testData = [{ id: 1, name: 'User 1' }];
 
-      const result = await service.insertTableData(mockConnection, 'users', testData);
+      const result = await service.insertTableData(
+        mockConnection,
+        'users',
+        testData
+      );
 
       expect(result.success).toBe(false);
       expect(result.errors).toHaveLength(1);
@@ -523,10 +594,19 @@ describe('Data Service', () => {
         query: jest.fn().mockResolvedValue({ rowCount: 2 })
       };
 
-      const batch = [{ id: 1, name: 'User 1' }, { id: 2, name: 'User 2' }];
+      const batch = [
+        { id: 1, name: 'User 1' },
+        { id: 2, name: 'User 2' }
+      ];
       const columns = ['id', 'name'];
 
-      const result = await service.insertBatch(mockConnection, 'users', batch, columns, 'skip');
+      const result = await service.insertBatch(
+        mockConnection,
+        'users',
+        batch,
+        columns,
+        'skip'
+      );
 
       expect(result.insertedRows).toBe(2);
       expect(mockConnection.query).toHaveBeenCalledWith(
@@ -546,7 +626,13 @@ describe('Data Service', () => {
       const batch = [{ id: 1, name: 'User 1' }];
       const columns = ['id', 'name'];
 
-      const result = await service.insertBatch(mockConnection, 'users', batch, columns, 'update');
+      const result = await service.insertBatch(
+        mockConnection,
+        'users',
+        batch,
+        columns,
+        'update'
+      );
 
       expect(result.insertedRows).toBe(2);
       expect(mockConnection.query).toHaveBeenCalledWith(
@@ -563,8 +649,9 @@ describe('Data Service', () => {
       const batch = [{ invalid_col: 'value' }];
       const columns = ['id', 'name'];
 
-      await expect(service.insertBatch(mockConnection, 'users', batch, columns, 'error'))
-        .rejects.toThrow('No valid columns found for table users');
+      await expect(
+        service.insertBatch(mockConnection, 'users', batch, columns, 'error')
+      ).rejects.toThrow('No valid columns found for table users');
     });
 
     test('should synchronize table data', async () => {
@@ -572,16 +659,21 @@ describe('Data Service', () => {
       await service.initialize();
 
       const sourceConnection = {
-        query: jest.fn()
+        query: jest
+          .fn()
           .mockResolvedValueOnce({ rows: [{ count: '2' }] })
           .mockResolvedValueOnce({
-            rows: [{ id: 1, name: 'User 1' }, { id: 2, name: 'User 2' }],
+            rows: [
+              { id: 1, name: 'User 1' },
+              { id: 2, name: 'User 2' }
+            ],
             fields: [{ name: 'id' }, { name: 'name' }]
           })
       };
 
       const targetConnection = {
-        query: jest.fn()
+        query: jest
+          .fn()
           .mockResolvedValueOnce({ rowCount: 0 })
           .mockResolvedValueOnce({
             rows: [{ column_name: 'id' }, { column_name: 'name' }]
@@ -589,7 +681,11 @@ describe('Data Service', () => {
           .mockResolvedValueOnce({ rowCount: 2 })
       };
 
-      const result = await service.syncTableData(sourceConnection, targetConnection, 'users');
+      const result = await service.syncTableData(
+        sourceConnection,
+        targetConnection,
+        'users'
+      );
 
       expect(result.success).toBe(true);
       expect(result.sourceRows).toBe(2);
@@ -602,7 +698,8 @@ describe('Data Service', () => {
       await service.initialize();
 
       const sourceConnection = {
-        query: jest.fn()
+        query: jest
+          .fn()
           .mockResolvedValueOnce({
             rows: [{ table_name: 'users' }, { table_name: 'orders' }]
           })
@@ -622,7 +719,8 @@ describe('Data Service', () => {
       };
 
       const targetConnection = {
-        query: jest.fn()
+        query: jest
+          .fn()
           .mockResolvedValueOnce({ rowCount: 0 })
           .mockResolvedValueOnce({
             rows: [{ column_name: 'id' }, { column_name: 'name' }]
@@ -630,7 +728,11 @@ describe('Data Service', () => {
           .mockResolvedValueOnce({ rowCount: 1 })
           .mockResolvedValueOnce({ rowCount: 0 })
           .mockResolvedValueOnce({
-            rows: [{ column_name: 'id' }, { column_name: 'user_id' }, { column_name: 'total' }]
+            rows: [
+              { column_name: 'id' },
+              { column_name: 'user_id' },
+              { column_name: 'total' }
+            ]
           })
           .mockResolvedValueOnce({ rowCount: 1 })
       };
@@ -638,16 +740,20 @@ describe('Data Service', () => {
       const onTableStart = jest.fn();
       const onTableComplete = jest.fn();
 
-      const result = await service.syncAllData(sourceConnection, targetConnection, {
-        onTableStart,
-        onTableComplete
-      });
+      const result = await service.syncAllData(
+        sourceConnection,
+        targetConnection,
+        {
+          onTableStart,
+          onTableComplete
+        }
+      );
 
       expect(result.success).toBe(true);
       expect(result.totalTables).toBe(2);
       expect(result.totalSourceRows).toBe(2);
       expect(result.totalInsertedRows).toBe(2);
-      expect(result.tableOrder).toEqual(['users', 'orders']); 
+      expect(result.tableOrder).toEqual(['users', 'orders']);
       expect(onTableStart).toHaveBeenCalledTimes(2);
       expect(onTableComplete).toHaveBeenCalledTimes(2);
     });
@@ -657,7 +763,8 @@ describe('Data Service', () => {
       await service.initialize();
 
       const sourceConnection = {
-        query: jest.fn()
+        query: jest
+          .fn()
           .mockResolvedValueOnce({
             rows: [{ table_name: 'users' }, { table_name: 'bad_table' }]
           })
@@ -671,7 +778,8 @@ describe('Data Service', () => {
       };
 
       const targetConnection = {
-        query: jest.fn()
+        query: jest
+          .fn()
           .mockResolvedValueOnce({ rowCount: 0 })
           .mockResolvedValueOnce({
             rows: [{ column_name: 'id' }, { column_name: 'name' }]
@@ -679,12 +787,15 @@ describe('Data Service', () => {
           .mockResolvedValueOnce({ rowCount: 1 })
       };
 
-      const result = await service.syncAllData(sourceConnection, targetConnection);
+      const result = await service.syncAllData(
+        sourceConnection,
+        targetConnection
+      );
 
       expect(result.success).toBe(false);
       expect(result.errors).toHaveLength(1);
       expect(result.errors[0].tableName).toBe('bad_table');
-      expect(result.tables).toHaveLength(1); 
+      expect(result.tables).toHaveLength(1);
       expect(result.tables[0].success).toBe(true);
     });
 
@@ -692,10 +803,18 @@ describe('Data Service', () => {
       const service = new DataService();
       const mockConnection = { query: jest.fn() };
 
-      await expect(service.clearTableData(mockConnection, 'users')).rejects.toThrow('Data service not initialized');
-      await expect(service.insertTableData(mockConnection, 'users', [])).rejects.toThrow('Data service not initialized');
-      await expect(service.syncTableData(mockConnection, mockConnection, 'users')).rejects.toThrow('Data service not initialized');
-      await expect(service.syncAllData(mockConnection, mockConnection)).rejects.toThrow('Data service not initialized');
+      await expect(
+        service.clearTableData(mockConnection, 'users')
+      ).rejects.toThrow('Data service not initialized');
+      await expect(
+        service.insertTableData(mockConnection, 'users', [])
+      ).rejects.toThrow('Data service not initialized');
+      await expect(
+        service.syncTableData(mockConnection, mockConnection, 'users')
+      ).rejects.toThrow('Data service not initialized');
+      await expect(
+        service.syncAllData(mockConnection, mockConnection)
+      ).rejects.toThrow('Data service not initialized');
     });
   });
 });

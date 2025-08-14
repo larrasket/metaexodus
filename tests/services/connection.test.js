@@ -25,7 +25,9 @@ jest.unstable_mockModule('pg', () => {
   };
 });
 
-const { ConnectionService, connectionService } = await import('../../src/services/connection.js');
+const { ConnectionService, connectionService } = await import(
+  '../../src/services/connection.js'
+);
 const { configManager } = await import('../../src/config/database.js');
 
 const { Client, Pool } = await import('pg');
@@ -46,7 +48,7 @@ describe('Connection Service', () => {
     process.env.DB_LOCAL_SSL = 'false';
     process.env.DB_CONNECTION_TIMEOUT = '30000';
     process.env.SYNC_LOG_LEVEL = 'info';
-    
+
     process.env.METABASE_BASE_URL = 'https://test-metabase.com';
     process.env.METABASE_DATABASE_ID = '1';
     process.env.DB_REMOTE_USERNAME = 'remote_user';
@@ -76,12 +78,14 @@ describe('Connection Service', () => {
       const result = await service.initialize();
 
       expect(result.success).toBe(true);
-      expect(result.message).toBe('Connection service initialized successfully');
+      expect(result.message).toBe(
+        'Connection service initialized successfully'
+      );
     });
 
     test('should fail initialization with invalid config', async () => {
       delete process.env.DB_LOCAL_HOST;
-      
+
       configManager.validated = false;
       configManager.localConfig = null;
 
@@ -112,7 +116,9 @@ describe('Connection Service', () => {
     test('should throw error when connecting without initialization', async () => {
       const service = new ConnectionService();
 
-      await expect(service.connectLocal()).rejects.toThrow('Connection service not initialized. Call initialize() first.');
+      await expect(service.connectLocal()).rejects.toThrow(
+        'Connection service not initialized. Call initialize() first.'
+      );
     });
 
     test('should handle connection errors gracefully', async () => {
@@ -122,7 +128,9 @@ describe('Connection Service', () => {
       mockClient.connect.mockRejectedValue(new Error('Connection failed'));
       jest.spyOn(service, 'sleep').mockResolvedValue();
 
-      await expect(service.connectLocal()).rejects.toThrow('Failed to connect to local database after 3 attempts: Connection failed');
+      await expect(service.connectLocal()).rejects.toThrow(
+        'Failed to connect to local database after 3 attempts: Connection failed'
+      );
     });
 
     test('should create local connection pool', async () => {
@@ -137,7 +145,7 @@ describe('Connection Service', () => {
 
     test('should not have remote connection pool functionality', () => {
       const service = new ConnectionService();
-      
+
       expect(service.remotePool).toBeNull();
       expect(service.remoteClient).toBeNull();
     });
@@ -224,7 +232,7 @@ describe('Connection Service', () => {
     test('should close all connections successfully', async () => {
       const service = new ConnectionService();
       await service.initialize();
-      
+
       service.localClient = mockClient;
       service.localPool = mockPool;
 
@@ -237,17 +245,21 @@ describe('Connection Service', () => {
     test('should handle errors during connection cleanup', async () => {
       const service = new ConnectionService();
       await service.initialize();
-      
+
       service.localClient = mockClient;
       mockClient.end.mockRejectedValue(new Error('Cleanup failed'));
 
-      await expect(service.closeConnections()).rejects.toThrow('Errors during cleanup');
+      await expect(service.closeConnections()).rejects.toThrow(
+        'Errors during cleanup'
+      );
     });
 
     test('should throw error when creating pool without initialization', async () => {
       const service = new ConnectionService();
 
-      await expect(service.createLocalPool()).rejects.toThrow('Connection service not initialized. Call initialize() first.');
+      await expect(service.createLocalPool()).rejects.toThrow(
+        'Connection service not initialized. Call initialize() first.'
+      );
     });
 
     test('should retry connection with exponential backoff', async () => {
@@ -279,7 +291,9 @@ describe('Connection Service', () => {
       mockClient.connect.mockRejectedValue(new Error('Connection failed'));
       jest.spyOn(service, 'sleep').mockResolvedValue();
 
-      await expect(service.connectLocal()).rejects.toThrow('Failed to connect to local database after 3 attempts');
+      await expect(service.connectLocal()).rejects.toThrow(
+        'Failed to connect to local database after 3 attempts'
+      );
       expect(service.sleep).toHaveBeenCalledTimes(2);
     });
 
@@ -293,26 +307,26 @@ describe('Connection Service', () => {
 
     test('should configure retry settings', () => {
       const service = new ConnectionService();
-      
+
       service.configureRetry({ maxRetries: 5, baseDelay: 2000 });
-      
+
       expect(service.retryConfig.maxRetries).toBe(5);
       expect(service.retryConfig.baseDelay).toBe(2000);
     });
 
     test('should reset retry attempts for specific connection type', () => {
       const service = new ConnectionService();
-      
+
       service.connectionAttempts.set('local', 3);
       service.resetRetryAttempts('local');
-      
+
       expect(service.connectionAttempts.get('local')).toBe(0);
     });
 
     test('should monitor connection pools', async () => {
       const service = new ConnectionService();
       await service.initialize();
-      
+
       service.localPool = mockPool;
 
       const monitoring = await service.monitorPools();
@@ -328,9 +342,11 @@ describe('Connection Service', () => {
     test('should handle pool monitoring errors', async () => {
       const service = new ConnectionService();
       await service.initialize();
-      
+
       const failingPool = {
-        connect: jest.fn().mockRejectedValue(new Error('Pool connection failed'))
+        connect: jest
+          .fn()
+          .mockRejectedValue(new Error('Pool connection failed'))
       };
       service.localPool = failingPool;
 
@@ -349,8 +365,7 @@ describe('Connection Service', () => {
 
       try {
         await service.connectLocal();
-      } catch (error) {
-      }
+      } catch (_error) {}
 
       expect(sleepSpy).toHaveBeenCalledWith(1000);
       expect(sleepSpy).toHaveBeenCalledWith(2000);
@@ -367,8 +382,7 @@ describe('Connection Service', () => {
 
       try {
         await service.connectLocal();
-      } catch (error) {
-      }
+      } catch (_error) {}
 
       expect(sleepSpy).toHaveBeenCalledWith(1000);
       expect(sleepSpy).toHaveBeenCalledWith(2000);

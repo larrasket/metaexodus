@@ -1,4 +1,12 @@
-import { validateRequiredEnvVars, validateEnvVarFormats, validateEnvironment, setDefaultEnvVars, createEnvTemplate, REQUIRED_ENV_VARS, OPTIONAL_ENV_VARS } from '../../src/utils/env.js';
+import {
+  createEnvTemplate,
+  OPTIONAL_ENV_VARS,
+  REQUIRED_ENV_VARS,
+  setDefaultEnvVars,
+  validateEnvironment,
+  validateEnvVarFormats,
+  validateRequiredEnvVars
+} from '../../src/utils/env.js';
 
 describe('Environment Validation Utility', () => {
   let originalEnv;
@@ -6,11 +14,10 @@ describe('Environment Validation Utility', () => {
   beforeEach(() => {
     originalEnv = { ...process.env };
 
-    
-    REQUIRED_ENV_VARS.forEach(key => {
+    REQUIRED_ENV_VARS.forEach((key) => {
       delete process.env[key];
     });
-    Object.keys(OPTIONAL_ENV_VARS).forEach(key => {
+    Object.keys(OPTIONAL_ENV_VARS).forEach((key) => {
       delete process.env[key];
     });
   });
@@ -20,17 +27,47 @@ describe('Environment Validation Utility', () => {
   });
 
   describe('validateRequiredEnvVars', () => {
-    test('should return success when all required variables are present', () => {
-      REQUIRED_ENV_VARS.forEach(key => {
+    test('should validate all required environment variables', () => {
+      // Set all required environment variables
+      REQUIRED_ENV_VARS.forEach((key) => {
         process.env[key] = 'test_value';
       });
 
       const result = validateRequiredEnvVars();
-
       expect(result.success).toBe(true);
       expect(result.missing).toHaveLength(0);
       expect(result.invalid).toHaveLength(0);
-      expect(result.total).toBe(REQUIRED_ENV_VARS.length);
+      expect(result.total).toBe(9);
+    });
+
+    test('should handle passwords with special characters', () => {
+      // Set all required environment variables
+      REQUIRED_ENV_VARS.forEach((key) => {
+        process.env[key] = 'test_value';
+      });
+
+      // Set a password with special characters
+      process.env.DB_REMOTE_PASSWORD = 'p@ssw0rd!@#$%^&*()_+-=[]{}|;:,.<>?';
+
+      const result = validateRequiredEnvVars();
+      expect(result.success).toBe(true);
+      expect(result.invalid).toHaveLength(0);
+      expect(result.missing).toHaveLength(0);
+    });
+
+    test('should handle quoted passwords with special characters', () => {
+      // Set all required environment variables
+      REQUIRED_ENV_VARS.forEach((key) => {
+        process.env[key] = 'test_value';
+      });
+
+      // Set a quoted password with special characters
+      process.env.DB_REMOTE_PASSWORD = '"p@ssw0rd!@#$%^&*()_+-=[]{}|;:,.<>?"';
+
+      const result = validateRequiredEnvVars();
+      expect(result.success).toBe(true);
+      expect(result.invalid).toHaveLength(0);
+      expect(result.missing).toHaveLength(0);
     });
 
     test('should identify missing variables', () => {
@@ -46,7 +83,7 @@ describe('Environment Validation Utility', () => {
     });
 
     test('should identify invalid (empty) variables', () => {
-      REQUIRED_ENV_VARS.forEach(key => {
+      REQUIRED_ENV_VARS.forEach((key) => {
         process.env[key] = key === 'DB_LOCAL_HOST' ? '' : 'test_value';
       });
 
@@ -74,7 +111,9 @@ describe('Environment Validation Utility', () => {
       const result = validateEnvVarFormats();
 
       expect(result.success).toBe(false);
-      expect(result.errors).toContain('DB_LOCAL_PORT must be a valid port number (1-65535)');
+      expect(result.errors).toContain(
+        'DB_LOCAL_PORT must be a valid port number (1-65535)'
+      );
     });
 
     test('should validate timeout correctly', () => {
@@ -91,7 +130,9 @@ describe('Environment Validation Utility', () => {
       const result = validateEnvVarFormats();
 
       expect(result.success).toBe(false);
-      expect(result.errors).toContain('DB_CONNECTION_TIMEOUT must be a number >= 1000 (milliseconds)');
+      expect(result.errors).toContain(
+        'DB_CONNECTION_TIMEOUT must be a number >= 1000 (milliseconds)'
+      );
     });
 
     test('should validate batch size correctly', () => {
@@ -108,7 +149,9 @@ describe('Environment Validation Utility', () => {
       const result = validateEnvVarFormats();
 
       expect(result.success).toBe(false);
-      expect(result.errors).toContain('DB_BATCH_SIZE must be a positive number');
+      expect(result.errors).toContain(
+        'DB_BATCH_SIZE must be a positive number'
+      );
     });
 
     test('should validate log level correctly', () => {
@@ -125,7 +168,9 @@ describe('Environment Validation Utility', () => {
       const result = validateEnvVarFormats();
 
       expect(result.success).toBe(false);
-      expect(result.errors).toContain('SYNC_LOG_LEVEL must be one of: error, warn, info, debug');
+      expect(result.errors).toContain(
+        'SYNC_LOG_LEVEL must be one of: error, warn, info, debug'
+      );
     });
   });
 
@@ -151,7 +196,7 @@ describe('Environment Validation Utility', () => {
 
   describe('validateEnvironment', () => {
     test('should return comprehensive validation results', () => {
-      REQUIRED_ENV_VARS.forEach(key => {
+      REQUIRED_ENV_VARS.forEach((key) => {
         process.env[key] = 'test_value';
       });
 
@@ -174,11 +219,15 @@ describe('Environment Validation Utility', () => {
 
       expect(result.success).toBe(false);
       expect(result.allErrors.length).toBeGreaterThan(0);
-      expect(result.allErrors.some(error => error.includes('Missing required variable'))).toBe(true);
+      expect(
+        result.allErrors.some((error) =>
+          error.includes('Missing required variable')
+        )
+      ).toBe(true);
     });
 
     test('should set default values during validation', () => {
-      REQUIRED_ENV_VARS.forEach(key => {
+      REQUIRED_ENV_VARS.forEach((key) => {
         process.env[key] = 'test_value';
       });
       process.env.DB_LOCAL_PORT = '5432';
