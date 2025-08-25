@@ -62,11 +62,39 @@ yarn start
 
 That's it! Watch as it copies everything over.
 
+#### Advanced Options
+
+```bash
+# Regular sync (stops on any error and rolls back all changes)
+yarn sync
+
+# Continue sync even if some tables fail (no rollback)
+yarn sync:ignore-errors
+# or
+yarn start --ignore-errors
+
+# Dry run to see what would be synchronized without making changes
+yarn start --dry-run
+```
+
+## Command Line Options
+
+- `--dry-run` or `-d`: Analyze what would be synchronized without making any changes
+- `--ignore-errors` or `-i`: Continue synchronization even if individual tables fail (skips rollback)
+- `--help` or `-h`: Show help message
+
+When using `--ignore-errors`, the tool will:
+
+- Continue processing remaining tables even if some fail
+- Skip the rollback process that normally clears all data on error
+- Provide a summary showing which tables succeeded and which failed
+- Exit with success if at least some tables were synchronized
+
 
 ## Finding your Metabase Database ID
 
 1. Go to your Metabase admin panel
-2. Click on "Databases" 
+2. Click on "Databases"
 3. Find your database in the list
 4. The ID is in the URL when you click on it: `/admin/databases/4` means ID is `4`
 
@@ -85,7 +113,7 @@ yarn lint
 yarn lint:fix
 ```
 
-## TODO 
+## TODO
 
 - [ ] Incremental sync: Only copy new/changed data instead of everything
 - [ ] Schema-only mode: Just copy table structures without data
@@ -94,6 +122,7 @@ yarn lint:fix
 - [ ] Multiple database support: MySQL, SQLite, etc.
 
 ### Current Limitations
+
 - Requires existing database schema (can't create the database for you)
 - Only works with PostgreSQL locally
 - No way to exclude sensitive tables or columns
