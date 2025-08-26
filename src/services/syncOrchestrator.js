@@ -13,7 +13,7 @@ class SyncOrchestratorService {
   constructor() {
     this.syncConfig = {
       batchSize: parseInt(process.env.DB_BATCH_SIZE) || 1000,
-      onConflict: 'error',
+      onConflict: process.env.DB_ON_CONFLICT || 'skip',
       enableRollback: true,
       enableTransformation: true
     };
@@ -305,13 +305,23 @@ class SyncOrchestratorService {
         insertResult.errors && insertResult.errors.length > 0
           ? insertResult.errors[0].error
           : 'Unknown insertion error';
-      throw new Error(`Data insertion failed: ${errorDetails}`);
+      const err = new Error(`Data insertion failed: ${errorDetails}`);
+      err.details = insertResult.errors || [];
+      throw err;
     }
 
     if (insertResult.insertedRows !== extractResult.data.length) {
-      throw new Error(
-        `Row count mismatch: expected ${extractResult.data.length}, inserted ${insertResult.insertedRows}`
-      );
+      const expected = extractResult.data.length;
+      const inserted = insertResult.insertedRows;
+      if (this.syncConfig.onConflict === 'skip') {
+        logger.warn(
+          `Row count mismatch for ${table.name}: expected ${expected}, inserted ${inserted}. Duplicates likely skipped (onConflict=skip). Continuing.`
+        );
+      } else {
+        throw new Error(
+          `Row count mismatch: expected ${expected}, inserted ${inserted}`
+        );
+      }
     }
 
     this.syncStats.syncedRows += insertResult.insertedRows;

@@ -46,26 +46,29 @@ function validateEnvVarFormats() {
   const errors = [];
 
   const localPort = process.env.DB_LOCAL_PORT;
-
-  if (
-    localPort &&
-    (Number.isNaN(localPort) ||
-      parseInt(localPort) <= 0 ||
-      parseInt(localPort) > 65535)
-  ) {
-    errors.push('DB_LOCAL_PORT must be a valid port number (1-65535)');
+  if (localPort) {
+    const portNum = parseInt(localPort, 10);
+    if (Number.isNaN(portNum) || portNum <= 0 || portNum > 65535) {
+      errors.push('DB_LOCAL_PORT must be a valid port number (1-65535)');
+    }
   }
 
   const timeout = process.env.DB_CONNECTION_TIMEOUT;
-  if (timeout && (Number.isNaN(timeout) || parseInt(timeout) < 1000)) {
-    errors.push(
-      'DB_CONNECTION_TIMEOUT must be a number >= 1000 (milliseconds)'
-    );
+  if (timeout) {
+    const timeoutNum = parseInt(timeout, 10);
+    if (Number.isNaN(timeoutNum) || timeoutNum < 1000) {
+      errors.push(
+        'DB_CONNECTION_TIMEOUT must be a number >= 1000 (milliseconds)'
+      );
+    }
   }
 
   const batchSize = process.env.DB_BATCH_SIZE;
-  if (batchSize && (Number.isNaN(batchSize) || parseInt(batchSize) < 1)) {
-    errors.push('DB_BATCH_SIZE must be a positive number');
+  if (batchSize) {
+    const batchNum = parseInt(batchSize, 10);
+    if (Number.isNaN(batchNum) || batchNum < 1) {
+      errors.push('DB_BATCH_SIZE must be a positive number');
+    }
   }
 
   const logLevel = process.env.SYNC_LOG_LEVEL;

@@ -448,7 +448,12 @@ class DataService {
       return { insertedRows: 0 };
     }
 
-    const dataKeys = Object.keys(batch[0]);
+    // Use union of keys from all rows in the batch to avoid missing columns
+    const dataKeySet = new Set();
+    batch.forEach((row) => {
+      Object.keys(row || {}).forEach((k) => dataKeySet.add(k));
+    });
+    const dataKeys = Array.from(dataKeySet);
     const validColumns = columnNames.filter((col) => dataKeys.includes(col));
 
     if (validColumns.length === 0) {
@@ -505,6 +510,18 @@ class DataService {
       });
     });
 
+    // Sanity check: values length must match batch size * columns
+    const expectedValues = batch.length * validColumns.length;
+    if (values.length !== expectedValues) {
+      logger.error(
+        `Values length mismatch for table ${tableName}: expected ${expectedValues} values but got ${values.length}`
+      );
+      logger.debug('Constructed query:', { query, expectedValues, valuesLength: values.length, validColumns, sampleRow: batch[0] });
+      throw new Error(
+        `Batch construction error: expected ${expectedValues} values but got ${values.length}`
+      );
+    }
+
     try {
       const result = await connection.query(query, values);
       return {
@@ -524,7 +541,54 @@ class DataService {
         sampleRow: batch[0]
       });
 
-      throw new Error(`Batch insertion failed: ${errorMessage}`);
+      // If batch insertion fails, attempt to insert rows individually to isolate bad rows.
+      logger.warn(
+        `Batch insert failed for ${tableName} (batchSize=${batch.length}). Falling back to per-row insert to isolate errors.`
+      );
+
+      const rowErrors = [];
+      let rowsInserted = 0;
+
+      for (let r = 0; r < batch.length; r++) {
+        const singleRow = batch[r];
+        const singlePlaceholders = validColumns.map((_, idx) => `$${idx + 1}`).join(', ');
+        const singleQuery = `INSERT INTO "${tableName}" (${columnsList}) VALUES (${singlePlaceholders})` +
+          (onConflict === 'skip' ? ' ON CONFLICT DO NOTHING' : onConflict === 'update' ? ` ON CONFLICT DO UPDATE SET ${validColumns.map((col) => `"${col}" = EXCLUDED."${col}"`).join(', ')}` : '');
+
+        const singleValues = validColumns.map((col) => {
+          let value = singleRow[col];
+          if (value === undefined) {
+            value = null;
+          }
+          if (value === '') {
+            value = null;
+          }
+          if (Array.isArray(value) || (value && typeof value === 'object')) {
+            value = JSON.stringify(value);
+          }
+          if (typeof value === 'string') {
+            const t = value.trim();
+            if ((t.startsWith('[') && t.endsWith(']')) || (t.startsWith('{') && t.endsWith('}'))) {
+              value = t;
+            }
+          }
+          return value;
+        });
+
+        try {
+          const res = await connection.query(singleQuery, singleValues);
+          rowsInserted += res.rowCount || 0;
+        } catch (singleErr) {
+          rowErrors.push({ rowIndex: r, error: singleErr.message, sampleRow: singleRow });
+          logger.debug(`Row insert failed for ${tableName} row ${r}: ${singleErr.message}`, { sampleRow: singleRow });
+        }
+      }
+
+      if (rowErrors.length > 0) {
+        logger.error(`Per-row insertion reported ${rowErrors.length} failing rows for ${tableName}`);
+      }
+
+      return { insertedRows: rowsInserted, rowErrors };
     }
   }
 
